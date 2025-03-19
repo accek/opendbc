@@ -408,7 +408,13 @@ static safety_config honda_bosch_init(uint16_t param) {
   return ret;
 }
 
-static bool honda_nidec_fwd_hook(int bus_num, int addr) {
+static bool honda_nidec_fwd_hook(const CANPacket_t *to_push) {
+  int bus_num = GET_BUS(to_push);
+  int addr = GET_ADDR(to_push);
+
+  // fwd from car to camera. also fwd certain msgs from camera to car
+  // 0xE4 is steering on all cars except CRV and RDX, 0x194 for CRV and RDX,
+  // 0x1FA is brake control, 0x30C is acc hud, 0x33D is lkas hud
   bool block_msg = false;
 
   if (bus_num == 2) {
