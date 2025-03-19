@@ -14,6 +14,9 @@ bool volkswagen_set_button_prev = false;
 extern bool volkswagen_resume_button_prev;
 bool volkswagen_resume_button_prev = false;
 
+extern bool volkswagen_stock_acc_engaged;
+bool volkswagen_stock_acc_engaged = false;
+
 
 #define MSG_LH_EPS_03        0x09F   // RX from EPS, for driver steering torque
 #define MSG_ESP_19           0x0B2   // RX from ABS, for wheel speeds
@@ -25,6 +28,8 @@ bool volkswagen_resume_button_prev = false;
 #define MSG_GRA_ACC_01       0x12B   // TX by OP, ACC control buttons for cancel/resume
 #define MSG_ACC_07           0x12E   // TX by OP, ACC control instructions to the drivetrain coordinator
 #define MSG_ACC_02           0x30C   // TX by OP, ACC HUD data to the instrument cluster
+#define MSG_ACC_04           0x324   // TX by OP, ACC HUD data to the instrument cluster
+#define MSG_ACC_13           0x2A7   // TX by OP, ACC HUD data to the instrument cluster
 #define MSG_LDW_02           0x397   // TX by OP, Lane line recognition and text alerts
 #define MSG_MOTOR_14         0x3BE   // RX from ECU, for brake switch status
 
@@ -62,6 +67,14 @@ static uint32_t volkswagen_mqb_meb_compute_crc(const CANPacket_t *to_push) {
     crc ^= (uint8_t[]){0xE9, 0x65, 0xAE, 0x6B, 0x7B, 0x35, 0xE5, 0x5F, 0x4E, 0xC7, 0x86, 0xA2, 0xBB, 0xDD, 0xEB, 0xB4}[counter];
   } else if (addr == MSG_GRA_ACC_01) {
     crc ^= (uint8_t[]){0x6A, 0x38, 0xB4, 0x27, 0x22, 0xEF, 0xE1, 0xBB, 0xF8, 0x80, 0x84, 0x49, 0xC7, 0x9E, 0x1E, 0x2B}[counter];
+  } else if (addr == MSG_ACC_02) {
+    crc ^= (uint8_t[]){0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F}[counter];
+  } else if (addr == MSG_ACC_04) {
+    crc ^= (uint8_t[]){0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27}[counter];
+  } else if (addr == MSG_ACC_06) {
+    crc ^= (uint8_t[]){0x37, 0x7D, 0xF3, 0xA9, 0x18, 0x46, 0x6D, 0x4D, 0x3D, 0x71, 0x92, 0x9C, 0xE5, 0x32, 0x10, 0xB9}[counter];
+  } else if (addr == MSG_ACC_07) {
+    crc ^= (uint8_t[]){0xF8, 0xE5, 0x97, 0xC9, 0xD6, 0x07, 0x47, 0x21, 0x66, 0xDD, 0xCF, 0x6F, 0xA1, 0x94, 0x74, 0x63}[counter];
   } else {
     // Undefined CAN message, CRC check expected to fail
   }
