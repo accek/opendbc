@@ -269,14 +269,14 @@ class CarInterfaceBase(ABC):
     tune.torque.latAccelOffset = 0.0
     tune.torque.steeringAngleDeadzoneDeg = steering_angle_deadzone_deg
 
-  def update(self, can_packets: list[tuple[int, list[CanData]]]) -> tuple[structs.CarState, structs.CarStateSP]:
+  def update(self, can_packets: list[tuple[int, list[CanData]]]) -> tuple[structs.CarState, structs.CatStateSP, structs.CarStateAC]:
     # parse can
     for cp in self.can_parsers.values():
       if cp is not None:
         cp.update_strings(can_packets)
 
     # get CarState
-    ret, ret_sp = self.CS.update(self.can_parsers)
+    ret, ret_sp, ret_ac = self.CS.update(self.can_parsers)
 
     ret.canValid = all(cp.can_valid for cp in self.can_parsers.values())
     ret.canTimeout = any(cp.bus_timeout for cp in self.can_parsers.values())
@@ -296,11 +296,14 @@ class CarInterfaceBase(ABC):
 
     ret.buttonEnable = self.CS.update_button_enable(ret.buttonEvents)
 
+    # acspilot
+
     # save for next iteration
     self.CS.out = ret
     self.CS.out_sp = ret_sp
+    self.CS.out_ac = ret_ac
 
-    return ret, ret_sp
+    return ret, ret_sp, ret_ac
 
 
 class CarStateBase(ABC):
@@ -310,6 +313,7 @@ class CarStateBase(ABC):
     self.car_fingerprint = CP.carFingerprint
     self.out = structs.CarState()
     self.out_sp = structs.CarStateSP()
+    self.out_ac = structs.CarStateAC()
 
     self.cruise_buttons = 0
     self.left_blinker_cnt = 0
@@ -333,6 +337,10 @@ class CarStateBase(ABC):
   @abstractmethod
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     pass
+
+  def update_ac(self, can_parsers) -> structs.CarStateAC:
+    # by default use empty struct
+    return structs.CarStateAC()
 
   def update_speed_kf(self, v_ego_raw):
     if abs(v_ego_raw - self.v_ego_kf.x[0][0]) > 2.0:  # Prevent large accelerations when car starts at non zero speed

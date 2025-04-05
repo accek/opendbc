@@ -266,6 +266,20 @@ class CarState(CarStateBase):
     temp_fault = drive_mode and hca_status in ("REJECTED", "PREEMPTED") or not self.eps_init_complete
     return temp_fault, perm_fault
 
+  def update_ac(self, can_parsers) -> structs.CarStateAC:
+    if self.CP.flags & VolkswagenFlags.PQ:
+      # PQ not supported yet
+      return super().update_ac(can_parsers)
+
+    pt_cp = can_parsers[Bus.pt]
+
+    ret = structs.CarStateAC()
+
+    # Screen brightness
+    ret.screenBrightness = pt_cp.vl["Dimmung_01"]["DI_KL_58xd"] / 100.0
+
+    return ret
+
   @staticmethod
   def get_can_parsers(CP, CP_SP):
     if CP.flags & VolkswagenFlags.PQ:
@@ -286,6 +300,7 @@ class CarState(CarStateBase):
       ("Gateway_72", 10),   # From J533 CAN gateway (aggregated data)
       ("Motor_14", 10),     # From J623 Engine control module
       ("Airbag_02", 5),     # From J234 Airbag control module
+      ("Dimmung_01", 5),    # From J533 CAN gateway
       ("Kombi_01", 2),      # From J285 Instrument cluster
       ("Blinkmodi_02", 1),  # From J519 BCM (sent at 1Hz when no lights active, 50Hz when active)
       ("Kombi_03", 0),      # From J285 instrument cluster (not present on older cars, 1Hz when present)
