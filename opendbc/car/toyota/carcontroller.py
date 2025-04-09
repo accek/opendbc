@@ -50,8 +50,8 @@ def get_long_tune(CP, params):
 
 
 class CarController(CarControllerBase, SecOCLongCarController):
-  def __init__(self, dbc_names, CP, CP_SP):
-    super().__init__(dbc_names, CP, CP_SP)
+  def __init__(self, dbc_names, CP, CP_SP, CP_AC):
+    super().__init__(dbc_names, CP, CP_SP, CP_AC)
     SecOCLongCarController.__init__(self, CP)
     self.params = CarControllerParams(self.CP)
     self.last_torque = 0
@@ -78,7 +78,7 @@ class CarController(CarControllerBase, SecOCLongCarController):
     self.secoc_lta_message_counter = 0
     self.secoc_prev_reset_counter = 0
 
-  def update(self, CC, CC_SP, CS, now_nanos):
+  def update(self, CC, CC_SP, CC_AC, CS, now_nanos):
     actuators = CC.actuators
     stopping = actuators.longControlState == LongCtrlState.stopping
     hud_control = CC.hudControl

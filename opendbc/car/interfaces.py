@@ -111,23 +111,24 @@ class CarInterfaceBase(ABC):
   CarController: 'CarControllerBase'
   RadarInterface: 'RadarInterfaceBase' = RadarInterfaceBase
 
-  def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
+  def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP, CP_AC: structs.CarParamsAC):
     self.CP = CP
     self.CP_SP = CP_SP
+    self.CP_AC = CP_AC
 
     self.frame = 0
     self.v_ego_cluster_seen = False
 
-    self.CS: CarStateBase = self.CarState(CP, CP_SP)
-    self.can_parsers: dict[StrEnum, CANParser] = self.CS.get_can_parsers(CP, CP_SP)
+    self.CS: CarStateBase = self.CarState(CP, CP_SP, CP_AC)
+    self.can_parsers: dict[StrEnum, CANParser] = self.CS.get_can_parsers(CP, CP_SP, CP_AC)
 
     dbc_names = {bus: cp.dbc_name for bus, cp in self.can_parsers.items()}
-    self.CC: CarControllerBase = self.CarController(dbc_names, CP, CP_SP)
+    self.CC: CarControllerBase = self.CarController(dbc_names, CP, CP_SP, CP_AC)
 
-  def apply(self, c: structs.CarControl, c_sp: structs.CarControlSP, now_nanos: int | None = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
+  def apply(self, c: structs.CarControl, c_sp: structs.CarControlSP, c_ac: structs.CarControlAC, now_nanos: int | None = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
     if now_nanos is None:
       now_nanos = int(time.monotonic() * 1e9)
-    return self.CC.update(c, c_sp, self.CS, now_nanos)
+    return self.CC.update(c, c_sp, c_ac, self.CS, now_nanos)
 
   @staticmethod
   def get_pid_accel_limits(CP, current_speed, cruise_speed):
@@ -143,6 +144,10 @@ class CarInterfaceBase(ABC):
   @classmethod
   def get_non_essential_params_sp(cls, car_params, candidate: str) -> structs.CarParamsSP:
     return cls.get_params_sp(car_params, candidate, gen_empty_fingerprint(), list(), False, False)
+
+  @classmethod
+  def get_non_essential_params_ac(cls, car_params, candidate: str) -> structs.CarParamsSP:
+    return cls.get_params_ac(car_params, candidate, gen_empty_fingerprint(), list(), False, False)
 
   @classmethod
   def get_params(cls, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw],
@@ -178,6 +183,13 @@ class CarInterfaceBase(ABC):
 
     return cls._get_params_sp(car_params, car_params_sp, candidate, fingerprint, car_fw, alpha_long, docs)
 
+  @classmethod
+  def get_params_ac(cls, car_params, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw], experimental_long: bool,
+                    docs: bool) -> structs.CarParamsSP:
+    car_params_ac = structs.CarParamsAC()
+
+    return cls._get_params_ac(car_params, car_params_ac, candidate, fingerprint, car_fw, experimental_long, docs)
+
   @staticmethod
   @abstractmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint: dict[int, dict[int, int]],
@@ -201,7 +213,13 @@ class CarInterfaceBase(ABC):
     return ret
 
   @staticmethod
-  def init(CP: structs.CarParams, CP_SP: structs.CarParamsSP, can_recv: CanRecvCallable, can_send: CanSendCallable):
+  def _get_params_ac(stock_cp: structs.CarParams, ret: structs.CarParamsAC, candidate, fingerprint: dict[int, dict[int, int]],
+                     car_fw: list[structs.CarParams.CarFw], experimental_long: bool, docs: bool) -> structs.CarParamsSP:
+    carlog.warning(f"Car {candidate} does not have a _get_params_ac method, using defaults")
+    return ret
+
+  @staticmethod
+  def init(CP: structs.CarParams, CP_SP: structs.CarParamsSP, CP_AC: structs.CarParamsAC, can_recv: CanRecvCallable, can_send: CanSendCallable):
     pass
 
   @staticmethod
@@ -307,9 +325,10 @@ class CarInterfaceBase(ABC):
 
 
 class CarStateBase(ABC):
-  def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
+  def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP, CP_AC: structs.CarParamsAC):
     self.CP = CP
     self.CP_SP = CP_SP
+    self.CP_AC = CP_AC
     self.car_fingerprint = CP.carFingerprint
     self.out = structs.CarState()
     self.out_sp = structs.CarStateSP()
@@ -411,19 +430,20 @@ class CarStateBase(ABC):
     return GEAR_SHIFTER_MAP.get(gear.upper(), GearShifter.unknown)
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP) -> dict[StrEnum, CANParser]:
+  def get_can_parsers(CP, CP_SP, CP_AC) -> dict[StrEnum, CANParser]:
     return {}
 
 
 class CarControllerBase(ABC):
-  def __init__(self, dbc_names: dict[StrEnum, str], CP: structs.CarParams, CP_SP: structs.CarParamsSP):
+  def __init__(self, dbc_names: dict[StrEnum, str], CP: structs.CarParams, CP_SP: structs.CarParamsSP, CP_AC: structs.CarParamsAC):
     self.CP = CP
     self.CP_SP = CP_SP
+    self.CP_AC = CP_AC
     self.frame = 0
     self.secoc_key: bytes = b"00" * 16
 
   @abstractmethod
-  def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS: CarStateBase, now_nanos: int) -> tuple[structs.CarControl.Actuators, list[CanData]]:
+  def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CC_AC: structs.CarControlAC, CS: CarStateBase, now_nanos: int) -> tuple[structs.CarControl.Actuators, list[CanData]]:
     pass
 
 

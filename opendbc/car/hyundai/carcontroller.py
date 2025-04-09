@@ -46,8 +46,8 @@ def process_hud_alert(enabled, fingerprint, hud_control):
 
 
 class CarController(CarControllerBase, EsccCarController, LongitudinalController, MadsCarController):
-  def __init__(self, dbc_names, CP, CP_SP):
-    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
+  def __init__(self, dbc_names, CP, CP_SP, CP_AC):
+    CarControllerBase.__init__(self, dbc_names, CP, CP_SP, CP_AC)
     EsccCarController.__init__(self, CP, CP_SP)
     MadsCarController.__init__(self)
     LongitudinalController.__init__(self, CP, CP_SP)
@@ -61,7 +61,7 @@ class CarController(CarControllerBase, EsccCarController, LongitudinalController
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
 
-  def update(self, CC, CC_SP, CS, now_nanos):
+  def update(self, CC, CC_SP, CC_AC, CS, now_nanos):
     EsccCarController.update(self, CS)
     MadsCarController.update(self, self.CP, CC, CC_SP, self.frame)
     if self.frame % 2 == 0:

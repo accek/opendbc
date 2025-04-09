@@ -9,8 +9,8 @@ from opendbc.sunnypilot.car.chrysler.mads import MadsCarController
 
 
 class CarController(CarControllerBase, MadsCarController, CarControllerExt):
-  def __init__(self, dbc_names, CP, CP_SP):
-    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
+  def __init__(self, dbc_names, CP, CP_SP, CP_AC):
+    CarControllerBase.__init__(self, dbc_names, CP, CP_SP, CP_AC)
     MadsCarController.__init__(self)
     CarControllerExt.__init__(self, CP)
     self.apply_torque_last = 0
@@ -23,7 +23,7 @@ class CarController(CarControllerBase, MadsCarController, CarControllerExt):
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.params = CarControllerParams(CP)
 
-  def update(self, CC, CC_SP, CS, now_nanos):
+  def update(self, CC, CC_SP, CC_AC, CS, now_nanos):
     MadsCarController.update(self, CC, CC_SP, CS)
     can_sends = []
 

@@ -99,8 +99,8 @@ HUDData = namedtuple("HUDData",
 
 
 class CarController(CarControllerBase, MadsCarController):
-  def __init__(self, dbc_names, CP, CP_SP):
-    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
+  def __init__(self, dbc_names, CP, CP_SP, CP_AC):
+    CarControllerBase.__init__(self, dbc_names, CP, CP_SP, CP_AC)
     MadsCarController.__init__(self)
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.params = CarControllerParams(CP)
@@ -119,7 +119,7 @@ class CarController(CarControllerBase, MadsCarController):
     self.brake = 0.0
     self.last_torque = 0.0
 
-  def update(self, CC, CC_SP, CS, now_nanos):
+  def update(self, CC, CC_SP, CC_AC, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
     actuators = CC.actuators
     hud_control = CC.hudControl

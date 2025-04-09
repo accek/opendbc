@@ -113,5 +113,10 @@ class CarStateSP:
 
 # acspilot structs
 
+CarParamsAC = car_custom.CarParamsAC
 CarStateAC = car_custom.CarStateAC
+CarControlAC = car_custom.CarControlAC
+
+CarParamsACT = capnp.lib.capnp._StructModule
 CarStateACT = capnp.lib.capnp._StructModule
+CarControlACT = capnp.lib.capnp._StructModule
