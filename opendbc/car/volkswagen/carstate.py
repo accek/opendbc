@@ -13,12 +13,14 @@ class CarState(CarStateBase):
   def __init__(self, CP, CP_SP):
     super().__init__(CP, CP_SP)
     self.frame = 0
+    self.eps_init_start_frame = 0
     self.eps_init_complete = False
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.esp_hold_confirmation = False
     self.upscale_lead_car_signal = False
-    self.eps_stock_values = False
+    self.stock_values = {}
+    self.stock_acc_set_speed = None
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
@@ -28,13 +30,13 @@ class CarState(CarStateBase):
           return True
     return False
 
-  def create_button_events(self, pt_cp, buttons):
+  def create_button_events(self, pt_cp, buttons, event_class=structs.CarState.ButtonEvent):
     button_events = []
 
     for button in buttons:
       state = pt_cp.vl[button.can_addr][button.can_msg] in button.values
       if self.button_states[button.event_type] != state:
-        event = structs.CarState.ButtonEvent()
+        event = event_class()
         event.type = button.event_type
         event.pressed = state
         button_events.append(event)
@@ -78,6 +80,7 @@ class CarState(CarStateBase):
       ret.yawRate = pt_cp.vl["ESP_02"]["ESP_Gierrate"] * (1, -1)[int(pt_cp.vl["ESP_02"]["ESP_VZ_Gierrate"])] * CV.DEG_TO_RAD
       hca_status = self.CCP.hca_status_values.get(pt_cp.vl["LH_EPS_03"]["EPS_HCA_Status"])
       if self.CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT:
+        self.update_stock_values("HCA_01", cam_cp)
         ret.carFaultedNonCritical = bool(cam_cp.vl["HCA_01"]["EA_Ruckfreigabe"]) or cam_cp.vl["HCA_01"]["EA_ACC_Sollstatus"] > 0  # EA
 
       drive_mode = True
@@ -99,7 +102,7 @@ class CarState(CarStateBase):
         ret.leftBlindspot = bool(ext_cp.vl["SWA_01"]["SWA_Infostufe_SWA_li"]) or bool(ext_cp.vl["SWA_01"]["SWA_Warnung_SWA_li"])
         ret.rightBlindspot = bool(ext_cp.vl["SWA_01"]["SWA_Infostufe_SWA_re"]) or bool(ext_cp.vl["SWA_01"]["SWA_Warnung_SWA_re"])
 
-      ret.stockFcw = bool(ext_cp.vl["ACC_10"]["AWV2_Freigabe"])
+      ret.stockFcw = bool(ext_cp.vl["ACC_10"]["AWV2_Freigabe"]) or bool(ext_cp.vl["ACC_04"]["ACC_Warnhinweis"]) or bool(ext_cp.vl["ACC_10"]["AWV2_Priowarnung"])
       ret.stockAeb = bool(ext_cp.vl["ACC_10"]["ANB_Teilbremsung_Freigabe"]) or bool(ext_cp.vl["ACC_10"]["ANB_Zielbremsung_Freigabe"])
 
       self.acc_type = ext_cp.vl["ACC_06"]["ACC_Typ"]
@@ -110,7 +113,8 @@ class CarState(CarStateBase):
       ret.cruiseState.available = pt_cp.vl["TSK_06"]["TSK_Status"] in (2, 3, 4, 5)
       ret.cruiseState.enabled = pt_cp.vl["TSK_06"]["TSK_Status"] in (3, 4, 5)
       ret.cruiseState.speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS if self.CP.pcmCruise else 0
-      ret.accFaulted = pt_cp.vl["TSK_06"]["TSK_Status"] in (6, 7)
+      ret.accFaulted = pt_cp.vl["TSK_06"]["TSK_Status"] == 7 or \
+                      ext_cp.vl["ACC_06"]["ACC_Status_ACC"] == 7
 
       ret.leftBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Left"])
       ret.rightBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Right"])
@@ -118,13 +122,16 @@ class CarState(CarStateBase):
     # Shared logic
 
     ret.vEgoRaw = float(np.mean([ret.wheelSpeeds.fl, ret.wheelSpeeds.fr, ret.wheelSpeeds.rl, ret.wheelSpeeds.rr]))
-    ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
+    ret.vEgo, _ = self.update_speed_kf(ret.vEgoRaw)
+    ret.aEgo = pt_cp.vl["ESP_02"]["ESP_Laengsbeschl"]
+    ret.vEgoCluster = pt_cp.vl["Kombi_01"]["KBI_angez_Geschw"]
 
     ret.steeringAngleDeg = pt_cp.vl["LWI_01"]["LWI_Lenkradwinkel"] * (1, -1)[int(pt_cp.vl["LWI_01"]["LWI_VZ_Lenkradwinkel"])]
     ret.steeringRateDeg = pt_cp.vl["LWI_01"]["LWI_Lenkradw_Geschw"] * (1, -1)[int(pt_cp.vl["LWI_01"]["LWI_VZ_Lenkradw_Geschw"])]
     ret.steeringTorque = pt_cp.vl["LH_EPS_03"]["EPS_Lenkmoment"] * (1, -1)[int(pt_cp.vl["LH_EPS_03"]["EPS_VZ_Lenkmoment"])]
     ret.steeringPressed = abs(ret.steeringTorque) > self.CCP.STEER_DRIVER_ALLOWANCE
-    ret.steerFaultTemporary, ret.steerFaultPermanent = self.update_hca_state(hca_status, drive_mode)
+    motor_running = bool(pt_cp.vl["Motor_14"]["MO_Motor_laeuft"]) and not bool(pt_cp.vl["Motor_14"]["MO_StartStopp_Motorstopp"])
+    ret.steerFaultTemporary, ret.steerFaultPermanent = self.update_hca_state(hca_status, motor_running)
 
     ret.gasPressed = ret.gas > 0
     ret.espActive = bool(pt_cp.vl["ESP_21"]["ESP_Eingriff"])
@@ -137,9 +144,9 @@ class CarState(CarStateBase):
     if ret.cruiseState.speed > 90:
       ret.cruiseState.speed = 0
 
-    self.eps_stock_values = pt_cp.vl["LH_EPS_03"]
-    self.ldw_stock_values = cam_cp.vl["LDW_02"] if self.CP.networkLocation == NetworkLocation.fwdCamera else {}
-    self.gra_stock_values = pt_cp.vl["GRA_ACC_01"]
+    self.update_stock_values("LH_EPS_03", pt_cp)
+    self.update_stock_values("LDW_02", cam_cp)
+    self.update_stock_values("GRA_ACC_01", pt_cp)
 
     ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS)
 
@@ -209,7 +216,7 @@ class CarState(CarStateBase):
 
     # Consume factory LDW data relevant for factory SWA (Lane Change Assist)
     # and capture it for forwarding to the blind spot radar controller
-    self.ldw_stock_values = cam_cp.vl["LDW_Status"] if self.CP.networkLocation == NetworkLocation.fwdCamera else {}
+    self.update_stock_values("LDW_Status", cam_cp)
 
     # Stock FCW is considered active if the release bit for brake-jerk warning
     # is set. Stock AEB considered active if the partial braking or target
@@ -258,12 +265,19 @@ class CarState(CarStateBase):
       self.low_speed_alert = False
     return self.low_speed_alert
 
-  def update_hca_state(self, hca_status, drive_mode=True):
+  def update_stock_values(self, msg_name, cp):
+    self.stock_values[msg_name] = cp.vl[msg_name]
+
+  def update_hca_state(self, hca_status, motor_running=True):
     # Treat FAULT as temporary for worst likely EPS recovery time, for cars without factory Lane Assist
-    # DISABLED means the EPS hasn't been configured to support Lane Assist
-    self.eps_init_complete = self.eps_init_complete or (hca_status in ("DISABLED", "READY", "ACTIVE") or self.frame > 600)
-    perm_fault = drive_mode and hca_status == "DISABLED" or (self.eps_init_complete and hca_status == "FAULT")
-    temp_fault = drive_mode and hca_status in ("REJECTED", "PREEMPTED") or not self.eps_init_complete
+    # DISABLED means the EPS hasn't been configured to support Lane Assist. Allow EPS to be temporarily initializing / faulting
+    # after motor start / restart from start-stop.
+    if not motor_running:
+      self.eps_init_complete = False
+      self.eps_init_start_frame = self.frame
+    self.eps_init_complete = self.eps_init_complete or hca_status in ("DISABLED", "READY", "ACTIVE") or self.frame > self.eps_init_start_frame + 600
+    perm_fault = hca_status == "DISABLED" or (self.eps_init_complete and hca_status in ("INITIALIZING", "FAULT"))
+    temp_fault = hca_status in ("REJECTED", "PREEMPTED")
     return temp_fault, perm_fault
 
   def update_ac(self, can_parsers) -> structs.CarStateAC:
@@ -272,11 +286,27 @@ class CarState(CarStateBase):
       return super().update_ac(can_parsers)
 
     pt_cp = can_parsers[Bus.pt]
+    cam_cp = can_parsers[Bus.cam]
+    ext_cp = pt_cp if self.CP.networkLocation == NetworkLocation.fwdCamera else cam_cp
 
     ret = structs.CarStateAC()
 
-    # Screen brightness
+    ret.accFaultedTemporary = pt_cp.vl["TSK_06"]["TSK_Status"] == 6 or \
+                              ext_cp.vl["ACC_06"]["ACC_Status_ACC"] == 6
     ret.screenBrightness = pt_cp.vl["Dimmung_01"]["DI_KL_58xd"] / 100.0
+    ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS_AC, event_class=structs.CarStateAC.ButtonEvent)
+
+    if self.CP.openpilotLongitudinalControl:
+      self.update_stock_values("ACC_02", ext_cp)
+      self.update_stock_values("ACC_04", ext_cp)
+      self.update_stock_values("ACC_06", ext_cp)
+      self.update_stock_values("ACC_07", ext_cp)
+      self.update_stock_values("ACC_13", ext_cp)
+      self.update_stock_values("TSK_06", pt_cp)
+      stock_acc_status = ext_cp.vl["ACC_06"]["ACC_Status_ACC"]
+      stock_acc_desired_accel = ext_cp.vl["ACC_06"]["ACC_Sollbeschleunigung_02"]
+      self.stock_acc_overriding = (stock_acc_status in (3, 4) and stock_acc_desired_accel < 3.005) or stock_acc_status in (5, 6, 7)
+      self.stock_acc_set_speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS
 
     return ret
 
@@ -321,12 +351,12 @@ class CarState(CarStateBase):
         ("HCA_01", 1),  # From R242 Driver assistance camera, 50Hz if steering/1Hz if not
       ]
 
-    if CP.networkLocation == NetworkLocation.fwdCamera:
-      cam_messages += [
-        # sig_address, frequency
-        ("LDW_02", 10)      # From R242 Driver assistance camera
-      ]
-    else:
+    cam_messages += [
+      # sig_address, frequency
+      ("LDW_02", 10)      # From R242 Driver assistance camera
+    ]
+
+    if CP.networkLocation != NetworkLocation.fwdCamera:
       # Radars are here on CANBUS.cam
       cam_messages += MqbExtraSignals.fwd_radar_messages
       if CP.enableBsm:
@@ -390,8 +420,11 @@ class MqbExtraSignals:
   # Additional signal and message lists for optional or bus-portable controllers
   fwd_radar_messages = [
     ("ACC_06", 50),                              # From J428 ACC radar control module
+    ("ACC_07", 50),                              # From J428 ACC radar control module
     ("ACC_10", 50),                              # From J428 ACC radar control module
     ("ACC_02", 17),                              # From J428 ACC radar control module
+    ("ACC_04", 17),                              # From J428 ACC radar control module
+    ("ACC_13", 17),                              # From J428 ACC radar control module
   ]
   bsm_radar_messages = [
     ("SWA_01", 20),                              # From J1086 Lane Change Assist

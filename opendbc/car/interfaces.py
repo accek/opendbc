@@ -185,7 +185,7 @@ class CarInterfaceBase(ABC):
 
   @classmethod
   def get_params_ac(cls, car_params, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw], experimental_long: bool,
-                    docs: bool) -> structs.CarParamsSP:
+                    docs: bool) -> structs.CarParamsAC:
     car_params_ac = structs.CarParamsAC()
 
     return cls._get_params_ac(car_params, car_params_ac, candidate, fingerprint, car_fw, experimental_long, docs)
@@ -214,7 +214,7 @@ class CarInterfaceBase(ABC):
 
   @staticmethod
   def _get_params_ac(stock_cp: structs.CarParams, ret: structs.CarParamsAC, candidate, fingerprint: dict[int, dict[int, int]],
-                     car_fw: list[structs.CarParams.CarFw], experimental_long: bool, docs: bool) -> structs.CarParamsSP:
+                     car_fw: list[structs.CarParams.CarFw], experimental_long: bool, docs: bool) -> structs.CarParamsAC:
     carlog.warning(f"Car {candidate} does not have a _get_params_ac method, using defaults")
     return ret
 

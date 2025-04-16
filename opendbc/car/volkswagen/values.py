@@ -30,15 +30,24 @@ class CarControllerParams:
   STEER_MAX = 300                          # Max heading control assist torque 3.00 Nm
   STEER_DRIVER_MULTIPLIER = 3              # weight driver torque heavily
   STEER_DRIVER_FACTOR = 1                  # from dbc
+  STEER_DRIVER_EA_SIMULATED = 60           # Simulated steering inputs to pacify Emergency Assist, 0.6 Nm
 
   STEER_TIME_MAX = 360                     # Max time that EPS allows uninterrupted HCA steering control
   STEER_TIME_ALERT = STEER_TIME_MAX - 10   # If mitigation fails, time to soft disengage before EPS timer expires
   STEER_TIME_STUCK_TORQUE = 1.9            # EPS limits same torque to 6 seconds, reset timer 3x within that period
 
-  DEFAULT_MIN_STEER_SPEED = 0.4            # m/s, newer EPS racks fault below this speed, don't show a low speed alert
+  DEFAULT_MIN_STEER_SPEED = 1.0            # m/s, newer EPS racks fault below this speed, don't show a low speed alert
 
   ACCEL_MAX = 2.0                          # 2.0 m/s max acceleration
   ACCEL_MIN = -3.5                         # 3.5 m/s max deceleration
+
+  STOP_ACCEL = -3.0                        # 3.0 m/s deceleration for stopping, as stock
+
+  STOCK_ACC_SET_SPEED_STEP = 10.0 * CV.KPH_TO_MS  # 10 km/h speed step for stock ACC set speed buttons
+
+  # TODO: adjust to match actual limits which depend on ACC version
+  STOCK_ACC_MIN_SET_SPEED = 30.0 * CV.KPH_TO_MS
+  STOCK_ACC_MAX_SET_SPEED = 250.0 * CV.KPH_TO_MS
 
   def __init__(self, CP):
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
@@ -60,7 +69,11 @@ class CarControllerParams:
         Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_Neu", "GRA_Up_kurz", [1]),
         Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_Neu", "GRA_Down_kurz", [1]),
         Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_Neu", "GRA_Abbrechen", [1]),
-        Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_Neu", "GRA_Zeitluecke", [1]),
+      ]
+
+      self.BUTTONS_AC = [
+        Button(structs.CarStateAC.ButtonEvent.Type.gapAdjustCruiseUp, "GRA_Neu", "GRA_Zeitluecke", [1]),
+        Button(structs.CarStateAC.ButtonEvent.Type.gapAdjustCruiseDown, "GRA_Neu", "GRA_Zeitluecke", [2]),
       ]
 
       self.LDW_MESSAGES = {
@@ -76,7 +89,7 @@ class CarControllerParams:
       self.LDW_STEP = 10                  # LDW_02 message frequency 10Hz
       self.ACC_HUD_STEP = 6               # ACC_02 message frequency 16Hz
       self.STEER_DRIVER_ALLOWANCE = 80    # Driver intervention threshold 0.8 Nm
-      self.STEER_DELTA_UP = 4             # Max HCA reached in 1.50s (STEER_MAX / (50Hz * 1.50))
+      self.STEER_DELTA_UP = 6             # Max HCA reached in 1.00s (STEER_MAX / (50Hz * 1.00))
       self.STEER_DELTA_DOWN = 10          # Min HCA reached in 0.60s (STEER_MAX / (50Hz * 0.60))
 
       if CP.transmissionType == TransmissionType.automatic:

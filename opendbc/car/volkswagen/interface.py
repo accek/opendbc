@@ -91,9 +91,12 @@ class CarInterface(CarInterfaceBase):
 
   @staticmethod
   def _get_params_ac(stock_cp: structs.CarParams, ret: structs.CarParamsAC, candidate, fingerprint: dict[int, dict[int, int]],
-                     car_fw: list[structs.CarParams.CarFw], experimental_long: bool, docs: bool) -> structs.CarParamsSP:
+                     car_fw: list[structs.CarParams.CarFw], experimental_long: bool, docs: bool) -> structs.CarParamsAC:
     if not (stock_cp.flags & VolkswagenFlags.PQ):
       if experimental_long:
         ret.stockAccOverrideAvailable = True
+      ret.accelButtonResumesCruise = False
+      ret.resumeButtonSetsDefaultVCruise = True
+      ret.decelButtonLimitedToVEgoWhenOverriding = False
 
     return ret
