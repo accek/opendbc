@@ -7,7 +7,9 @@ struct CarParamsAC @0xb86e6369214c01c8 {
   stockAccOverrideAvailable @0 :Bool; # whether the car can switch between stock acc and op acc while engaged
   accelButtonResumesCruise @1 :Bool = true;
   resumeButtonSetsDefaultVCruise @2 :Bool;
-  decelButtonSetsVEgoWhenOverriding @3 :Bool = true;
+  decelButtonLimitedToVEgoWhenOverriding @3 :Bool = true;
+  cruiseLongPressReverse @4 :Bool;
+  cruiseLargeStep @5 :Int8 = 5;
 }
 
 struct CarStateAC @0xf98d843bfd7004a3 {
@@ -37,6 +39,5 @@ struct CarControlAC @0xf416ec09499d9d19 {
   struct HUDControl {
     leadDistance @0 :Float32;
     leadAccel @1 :Float32;
-
   }
 }

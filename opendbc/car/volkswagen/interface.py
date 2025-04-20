@@ -98,5 +98,7 @@ class CarInterface(CarInterfaceBase):
       ret.accelButtonResumesCruise = False
       ret.resumeButtonSetsDefaultVCruise = True
       ret.decelButtonLimitedToVEgoWhenOverriding = False
+      ret.cruiseLongPressReverse = True
+      ret.cruiseLargeStep = 10
 
     return ret
