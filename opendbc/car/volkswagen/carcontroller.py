@@ -152,7 +152,7 @@ class CarController(CarControllerBase):
                            hud_alert, hud_control)
 
     if self.CP.openpilotLongitudinalControl:
-      if CC.stockAccArmed or CS.stock_acc_overriding:
+      if CC_AC.stockAccOverrideArmed or CS.out_ac.stockAccOverride:
         self.forward_message(CS, self.CCS.MSG_ACC_HUD_1, CANBUS.pt, can_sends)
         self.forward_message(CS, self.CCS.MSG_ACC_HUD_2, CANBUS.pt, can_sends)
         self.forward_message(CS, self.CCS.MSG_ACC_HUD_3, CANBUS.pt, can_sends)
@@ -182,11 +182,11 @@ class CarController(CarControllerBase):
       if set_speed_ms > 250 * CV.KPH_TO_MS:
         set_speed_ms = None
       can_switch_acc = not CS.out.brakePressed and not cancel_pressed
-      stock_acc_requested = CC.stockAccActive and can_switch_acc
+      stock_acc_requested = CC.stockAccOverrideActive and can_switch_acc
       stock_acc_button = self.calculate_stock_acc_button(CS, set_speed_ms, stock_acc_requested)
       self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, CANBUS.cam, can_sends, self.CCS.create_acc_buttons_control,
                            frame='auto', buttons=stock_acc_button,
-                           cancel=(CS.stock_acc_overriding and not CC.stockAccActive),)
+                           cancel=(CS.out_ac.stockAccOverride and not CC_AC.stockAccOverrideActive),)
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = self.apply_torque_last / self.CCP.STEER_MAX
@@ -280,7 +280,7 @@ class CarController(CarControllerBase):
       self.stock_acc_button = 2
       self.stock_acc_button_pressed_frame = self.frame
       return 2
-    elif not CS.stock_acc_overriding and stock_acc_requested:
+    elif not CS.out_ac.stockAccOverride and stock_acc_requested:
       self.stock_acc_button = 3
       self.stock_acc_button_pressed_frame = self.frame
       return 3
