@@ -17,6 +17,7 @@ class CarState(CarStateBase):
     self.eps_init_complete = False
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
+    self.button_states_ac = {button.event_type: False for button in self.CCP.BUTTONS_AC}
     self.esp_hold_confirmation = False
     self.upscale_lead_car_signal = False
     self.stock_values = {}
@@ -30,17 +31,17 @@ class CarState(CarStateBase):
           return True
     return False
 
-  def create_button_events(self, pt_cp, buttons, event_class=structs.CarState.ButtonEvent):
+  def create_button_events(self, pt_cp, buttons, button_states, event_class=structs.CarState.ButtonEvent):
     button_events = []
 
     for button in buttons:
       state = pt_cp.vl[button.can_addr][button.can_msg] in button.values
-      if self.button_states[button.event_type] != state:
+      if button_states[button.event_type] != state:
         event = event_class()
         event.type = button.event_type
         event.pressed = state
         button_events.append(event)
-      self.button_states[button.event_type] = state
+      button_states[button.event_type] = state
 
     return button_events
 
@@ -148,7 +149,7 @@ class CarState(CarStateBase):
     self.update_stock_values("LDW_02", cam_cp)
     self.update_stock_values("GRA_ACC_01", pt_cp)
 
-    ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS)
+    ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS, self.button_states)
 
     ret.lowSpeedAlert = self.update_low_speed_alert(ret.vEgo)
 
@@ -246,7 +247,7 @@ class CarState(CarStateBase):
     # Update button states for turn signals and ACC controls, capture all ACC button state/config for passthrough
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(300, pt_cp.vl["Gate_Komf_1"]["GK1_Blinker_li"],
                                                                             pt_cp.vl["Gate_Komf_1"]["GK1_Blinker_re"])
-    ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS)
+    ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS, self.button_states)
     self.gra_stock_values = pt_cp.vl["GRA_Neu"]
 
     # Additional safety checks performed in CarInterface.
@@ -294,7 +295,7 @@ class CarState(CarStateBase):
     ret.accFaultedTemporary = pt_cp.vl["TSK_06"]["TSK_Status"] == 6 or \
                               ext_cp.vl["ACC_06"]["ACC_Status_ACC"] == 6
     ret.screenBrightness = pt_cp.vl["Dimmung_01"]["DI_KL_58xd"] / 100.0
-    ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS_AC, event_class=structs.CarStateAC.ButtonEvent)
+    ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS_AC, self.button_states_ac, event_class=structs.CarStateAC.ButtonEvent)
 
     if self.CP.openpilotLongitudinalControl:
       self.update_stock_values("ACC_02", ext_cp)
