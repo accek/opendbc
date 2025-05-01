@@ -182,7 +182,7 @@ class CarController(CarControllerBase):
       if set_speed_ms > 250 * CV.KPH_TO_MS:
         set_speed_ms = None
       can_switch_acc = not CS.out.brakePressed and not cancel_pressed
-      stock_acc_requested = CC.stockAccOverrideActive and can_switch_acc
+      stock_acc_requested = CC_AC.stockAccOverrideActive and can_switch_acc
       stock_acc_button = self.calculate_stock_acc_button(CS, set_speed_ms, stock_acc_requested)
       self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, CANBUS.cam, can_sends, self.CCS.create_acc_buttons_control,
                            frame='auto', buttons=stock_acc_button,
