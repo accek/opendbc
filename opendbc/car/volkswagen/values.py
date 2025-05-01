@@ -107,8 +107,8 @@ class CarControllerParams:
       ]
 
       self.BUTTONS_AC = [
-        Button(structs.CarState.ButtonEvent.Type.gapAdjustCruiseUp, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [1]),
-        Button(structs.CarState.ButtonEvent.Type.gapAdjustCruiseDown, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [2]),
+        Button(structs.CarStateAC.ButtonEvent.Type.gapAdjustCruiseUp, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [1]),
+        Button(structs.CarStateAC.ButtonEvent.Type.gapAdjustCruiseDown, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [2]),
       ]
 
       self.LDW_MESSAGES = {
