@@ -10,7 +10,7 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class CarState(CarStateBase):
-  def __init__(self, CP, CP_SP):
+  def __init__(self, CP, CP_SP, CP_AC):
     super().__init__(CP, CP_SP)
     self.frame = 0
     self.eps_init_start_frame = 0

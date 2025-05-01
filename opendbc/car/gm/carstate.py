@@ -18,7 +18,7 @@ BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.D
 
 
 class CarState(CarStateBase):
-  def __init__(self, CP, CP_SP):
+  def __init__(self, CP, CP_SP, CP_AC):
     super().__init__(CP, CP_SP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
     self.shifter_values = can_define.dv["ECMPRDNL2"]["PRNDL2"]

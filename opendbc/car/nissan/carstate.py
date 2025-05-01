@@ -13,7 +13,7 @@ TORQUE_SAMPLES = 12
 
 
 class CarState(CarStateBase):
-  def __init__(self, CP, CP_SP):
+  def __init__(self, CP, CP_SP, CP_AC):
     super().__init__(CP, CP_SP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 
