@@ -10,7 +10,7 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 class CarState(CarStateBase):
   def __init__(self, CP, CP_SP, CP_AC):
-    super().__init__(CP, CP_SP)
+    super().__init__(CP, CP_SP, CP_AC)
 
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
     self.shifter_values = can_define.dv["GEAR"]["GEAR"]

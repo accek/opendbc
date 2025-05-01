@@ -12,7 +12,7 @@ GearShifter = structs.CarState.GearShifter
 class CarState(CarStateBase, CarStateExt):
   def __init__(self, CP, CP_SP, CP_AC):
     CarStateBase.__init__(self, CP, CP_SP, CP_AC)
-    CarStateExt.__init__(self, CP, CP_SP)
+    CarStateExt.__init__(self, CP, CP_SP, CP_AC)
     self.last_speed = 30
 
     self.acm_lka_hba_cmd = None
