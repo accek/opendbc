@@ -56,7 +56,7 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
                                                        {MSG_ACC_02, 0, 8, false}, {MSG_ACC_04, 0, 8, false}, {MSG_ACC_06, 0, 8, false},
                                                        {MSG_ACC_07, 0, 8, false}, {MSG_ACC_13, 0, 8, false}};
 
-  RxCheck volkswagen_mqb_rx_checks[] = {
+  static RxCheck volkswagen_mqb_rx_checks[] = {
     {.msg = {{MSG_ESP_19, 0, 8, .ignore_checksum = true, .ignore_quality_flag = true, .frequency = 100U}, { 0 }, { 0 }}},
     {.msg = {{MSG_LH_EPS_03, 0, 8, .max_counter = 15U, .ignore_quality_flag = true, .frequency = 100U}, { 0 }, { 0 }}},
     {.msg = {{MSG_ESP_05, 0, 8, .max_counter = 15U, .ignore_quality_flag = true, .frequency = 50U}, { 0 }, { 0 }}},
