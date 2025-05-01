@@ -165,7 +165,7 @@ class CarState(CarStateBase):
     return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     pt_messages = [
       ("BCMTurnSignals", 1),
       ("ECMPRDNL2", 10),

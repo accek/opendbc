@@ -122,7 +122,7 @@ class CarState(CarStateBase):
     return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     party_messages = [
       # sig_address, frequency
       ("DI_speed", 50),

@@ -279,7 +279,7 @@ class CarState(CarStateBase):
 
     return ret, ret_sp
 
-  def get_can_parsers(self, CP, CP_SP):
+  def get_can_parsers(self, CP, CP_SP, CP_AC):
     pt_messages = get_can_messages(CP, self.gearbox_msg)
 
     cam_messages = [

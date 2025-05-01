@@ -311,7 +311,7 @@ class CarState(CarStateBase):
     return ret
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     if CP.flags & VolkswagenFlags.PQ:
       return CarState.get_can_parsers_pq(CP)
 

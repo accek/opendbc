@@ -32,7 +32,7 @@ class CarState(CarStateBase):
     return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     messages = [
       ("MOTORS_DATA", 100),
       ("VAR_VALUES", 10),

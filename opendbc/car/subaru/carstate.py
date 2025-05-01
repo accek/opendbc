@@ -173,7 +173,7 @@ class CarState(CarStateBase, MadsCarState):
     return messages
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     pt_messages = [
       # sig_address, frequency
       ("Dashlights", 10),
