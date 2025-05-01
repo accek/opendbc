@@ -101,7 +101,7 @@ class CarController(CarControllerBase):
       sim_frame = self.frame % (2*sim_segment_frames)
       sign = 1 if CS.out.steeringTorque >= 0 else -1
       sim_torque = sim_frame if sim_frame < sim_segment_frames else 2*sim_segment_frames - sim_frame
-      sim_torque = min(sim_torque, abs(2*self.apply_steer_last))
+      sim_torque = min(sim_torque, abs(2*self.apply_torque_last))
       if CC_AC.stockDriverMonitoring:
         sim_torque = 0
       ea_simulated_torque = np.clip(CS.out.steeringTorque - sign*sim_torque, -self.CCP.STEER_MAX, self.CCP.STEER_MAX)
