@@ -149,7 +149,7 @@ class CarController(CarControllerBase):
         else:
           hud_alert = self.CCP.LDW_MESSAGES["laneAssistTakeOverChime"]
       self.forward_message(CS, self.CCS.MSG_LKA_HUD, CANBUS.pt, can_sends, self.CCS.create_lka_hud_control,
-                           hud_alert, hud_control)
+                           hud_alert, hud_control, CC_SP.mads)
 
     if self.CP.openpilotLongitudinalControl:
       if CC_AC.stockAccOverrideArmed or CS.out_ac.stockAccOverride:

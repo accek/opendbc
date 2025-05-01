@@ -2,8 +2,6 @@ from numpy import clip, interp
 
 from opendbc.car import structs
 
-LateralStatus = structs.CarControl.HUDControl.LateralStatus
-
 MSG_STEERING = "HCA_01"
 MSG_EPS = "LH_EPS_03"
 MSG_LKA_HUD = "LDW_02"
@@ -61,24 +59,24 @@ def create_tsk_update(values, stock_values):
   return values
 
 
-def lernmodus_value(lateral_status, lane_visible, lane_depart):
+def lernmodus_value(available, active, lane_visible, lane_depart):
   if lane_depart:
     return 2
-  elif lateral_status == LateralStatus.unavailable:
+  elif not available:
     return 0
-  elif lateral_status == LateralStatus.active:
+  elif active:
     return 3 if lane_visible else 2
   else:
     return 1
 
-def create_lka_hud_control(values, hud_alert, hud_control):
+def create_lka_hud_control(values, hud_alert, hud_control, mads):
   left_lane_visible = hud_control.lanesVisible and hud_control.leftLaneVisible
   right_lane_visible = hud_control.lanesVisible and hud_control.rightLaneVisible
   values.update({
-    "LDW_Status_LED_gelb": 1 if hud_control.lateralStatus == LateralStatus.ready else 0,
-    "LDW_Status_LED_gruen": 1 if hud_control.lateralStatus == LateralStatus.active else 0,
-    "LDW_Lernmodus_links": lernmodus_value(hud_control.lateralStatus, left_lane_visible, hud_control.leftLaneDepart),
-    "LDW_Lernmodus_rechts": lernmodus_value(hud_control.lateralStatus, right_lane_visible, hud_control.rightLaneDepart),
+    "LDW_Status_LED_gelb": 1 if mads.enabled else 0,
+    "LDW_Status_LED_gruen": 1 if mads.active else 0,
+    "LDW_Lernmodus_links": lernmodus_value(mads.available, mads.active, left_lane_visible, hud_control.leftLaneDepart),
+    "LDW_Lernmodus_rechts": lernmodus_value(mads.available, mads.active, right_lane_visible, hud_control.rightLaneDepart),
    })
   if hud_alert > 0:
     values["LDW_Texte"] = hud_alert
