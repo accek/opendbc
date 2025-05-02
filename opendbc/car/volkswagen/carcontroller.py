@@ -191,7 +191,7 @@ class CarController(CarControllerBase):
     new_actuators = actuators.as_builder()
     new_actuators.torque = self.apply_torque_last / self.CCP.STEER_MAX
     new_actuators.torqueOutputCan = self.apply_torque_last
-    new_actuators.accel = accel
+    new_actuators.accel = float(accel)
 
     self.frame += 1
     return new_actuators, can_sends
