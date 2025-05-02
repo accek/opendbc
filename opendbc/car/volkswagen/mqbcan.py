@@ -73,7 +73,7 @@ def create_lka_hud_control(values, hud_alert, hud_control, mads):
   left_lane_visible = hud_control.lanesVisible and hud_control.leftLaneVisible
   right_lane_visible = hud_control.lanesVisible and hud_control.rightLaneVisible
   values.update({
-    "LDW_Status_LED_gelb": 1 if mads.enabled else 0,
+    "LDW_Status_LED_gelb": 1 if mads.enabled and not mads.active else 0,
     "LDW_Status_LED_gruen": 1 if mads.active else 0,
     "LDW_Lernmodus_links": lernmodus_value(mads.available, mads.active, left_lane_visible, hud_control.leftLaneDepart),
     "LDW_Lernmodus_rechts": lernmodus_value(mads.available, mads.active, right_lane_visible, hud_control.rightLaneDepart),
