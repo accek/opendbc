@@ -186,7 +186,8 @@ class CarController(CarControllerBase):
       stock_acc_button = self.calculate_stock_acc_button(CS, set_speed_ms, stock_acc_requested)
       self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, CANBUS.cam, can_sends, self.CCS.create_acc_buttons_control,
                            frame='auto', buttons=stock_acc_button,
-                           cancel=(CS.out_ac.stockAccOverride and not CC_AC.stockAccOverrideActive),)
+                           cancel=(CS.out_ac.stockAccOverride and not CC_AC.stockAccOverrideActive),
+                           stock_gap_control=(CC_AC.stockAccOverrideArmed or CS.out_ac.stockAccOverride))
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = self.apply_torque_last / self.CCP.STEER_MAX

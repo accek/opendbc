@@ -83,7 +83,7 @@ def create_lka_hud_control(values, hud_alert, hud_control, mads):
   return values
 
 
-def create_acc_buttons_control(values, frame=None, buttons=0, cancel=False, resume=False):
+def create_acc_buttons_control(values, frame=None, buttons=0, cancel=False, resume=False, stock_gap_control=True):
   accel_cruise = 1 if buttons == 1 else 0
   decel_cruise = 1 if buttons == 2 else 0
   resume_cruise = 1 if buttons == 3 else 0
@@ -101,6 +101,9 @@ def create_acc_buttons_control(values, frame=None, buttons=0, cancel=False, resu
      "GRA_Tip_Runter": decel_cruise,
      "GRA_Tip_Hoch": accel_cruise,
    })
+
+  if not stock_gap_control:
+    values["GRA_Verstellung_Zeitluecke"] = 0
 
   return values
 

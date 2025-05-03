@@ -10,6 +10,7 @@ struct CarParamsAC @0xb86e6369214c01c8 {
   decelButtonLimitedToVEgoWhenOverriding @3 :Bool = true;
   cruiseLongPressReverse @4 :Bool;
   cruiseLargeStep @5 :Int8 = 5;
+  stockAccSeparateGapControl @6 :Bool;
 }
 
 struct CarStateAC @0xf98d843bfd7004a3 {

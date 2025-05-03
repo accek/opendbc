@@ -95,6 +95,7 @@ class CarInterface(CarInterfaceBase):
     if not (stock_cp.flags & VolkswagenFlags.PQ):
       if experimental_long:
         ret.stockAccOverrideAvailable = True
+        ret.stockAccSeparateGapControl = True
       ret.accelButtonResumesCruise = False
       ret.resumeButtonSetsDefaultVCruise = True
       ret.decelButtonLimitedToVEgoWhenOverriding = False
