@@ -34,6 +34,7 @@ MqbCounterCheck volkswagen_mqb_long_counter_checks[] = {
 static bool volkswagen_mqb_brake_pedal_switch = false;
 static bool volkswagen_mqb_brake_pressure_detected = false;
 static uint32_t volkswagen_mqb_long_allowed_last_ts = 0;
+static bool volkswagen_mqb_tx_attempted = false;
 
 static bool volkswagen_mqb_longitudinal_accel_checks(int desired_accel, const LongitudinalLimits limits) {
   if (!longitudinal_accel_checks(desired_accel, limits)) {
@@ -78,6 +79,7 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
   volkswagen_mqb_brake_pedal_switch = false;
   volkswagen_mqb_brake_pressure_detected = false;
   volkswagen_mqb_long_allowed_last_ts = 0;
+  volkswagen_mqb_tx_attempted = false;
 
   for (MqbCounterCheck* check = &volkswagen_mqb_long_counter_checks[0]; check->msg.addr != -1; check++) {
     check->last_counter = -1;
@@ -218,6 +220,8 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *to_send) {
   int bus = GET_BUS(to_send);
   bool tx = true;
 
+  volkswagen_mqb_tx_attempted = true;
+
   // TODO: consider detecting AE pass-through and allowing forwarding everything in this case
 
   // Safety check for HCA_01 Heading Control Assist torque
@@ -284,40 +288,43 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *to_send) {
 static bool volkswagen_mqb_fwd_hook(int bus_num, int addr) {
   bool block_msg = false;
 
-  switch (bus_num) {
-    case 0:
-      if (addr == MSG_LH_EPS_03) {
-        // openpilot needs to replace apparent driver steering input torque to pacify VW Emergency Assist
+  // If we didn't attempt any tx yet, just forward everything until we send the first message.
+  if (volkswagen_mqb_tx_attempted) {
+    switch (bus_num) {
+      case 0:
+        if (addr == MSG_LH_EPS_03) {
+          // openpilot needs to replace apparent driver steering input torque to pacify VW Emergency Assist
+          block_msg = true;
+        } else if (volkswagen_longitudinal && !volkswagen_stock_acc_engaged && (addr == MSG_TSK_06)) {
+          // openpilot needs to replace ACC feedback from TSK so that stock ACC would not fault
+          block_msg = true;
+        } else if (volkswagen_longitudinal && (addr == MSG_GRA_ACC_01)) {
+          // openpilot needs to replace ACC control input to ensure that the stock ACC is never active, yet
+          // monitoring
+          block_msg = true;
+        }
+        break;
+      case 2:
+        if (volkswagen_longitudinal && addr == MSG_ACC_06) {
+          int acc_status = (GET_BYTE(to_push, 7) & 0x70U) >> 4;
+          int desired_accel = ((((GET_BYTE(to_push, 4) & 0x7U) << 8) | GET_BYTE(to_push, 3)) * 5U) - 7220U;
+          volkswagen_stock_acc_engaged =
+              (((acc_status == 3) || (acc_status == 4)) && desired_accel < VOLKSWAGEN_MQB_LONG_LIMITS.inactive_accel) ||
+              (acc_status == 5) || (acc_status == 6) || (acc_status == 7);
+        }
+        if ((addr == MSG_HCA_01) || (addr == MSG_LDW_02)) {
+          // openpilot takes over LKAS steering control and related HUD messages from the camera
+          block_msg = true;
+        } else if (volkswagen_longitudinal && !volkswagen_stock_acc_engaged
+            && ((addr == MSG_ACC_02) || (addr == MSG_ACC_04) || (addr == MSG_ACC_06) || (addr == MSG_ACC_07) || (addr == MSG_ACC_13))) {
+          // openpilot takes over acceleration/braking control and related HUD messages from the stock ACC radar
+          block_msg = true;
+        }
+        break;
+      default:
         block_msg = true;
-      } else if (volkswagen_longitudinal && !volkswagen_stock_acc_engaged && (addr == MSG_TSK_06)) {
-        // openpilot needs to replace ACC feedback from TSK so that stock ACC would not fault
-        block_msg = true;
-      } else if (volkswagen_longitudinal && (addr == MSG_GRA_ACC_01)) {
-        // openpilot needs to replace ACC control input to ensure that the stock ACC is never active, yet
-        // monitoring
-        block_msg = true;
-      }
-      break;
-    case 2:
-      if (volkswagen_longitudinal && addr == MSG_ACC_06) {
-        int acc_status = (GET_BYTE(to_push, 7) & 0x70U) >> 4;
-        int desired_accel = ((((GET_BYTE(to_push, 4) & 0x7U) << 8) | GET_BYTE(to_push, 3)) * 5U) - 7220U;
-        volkswagen_stock_acc_engaged =
-            (((acc_status == 3) || (acc_status == 4)) && desired_accel < VOLKSWAGEN_MQB_LONG_LIMITS.inactive_accel) ||
-            (acc_status == 5) || (acc_status == 6) || (acc_status == 7);
-      }
-      if ((addr == MSG_HCA_01) || (addr == MSG_LDW_02)) {
-        // openpilot takes over LKAS steering control and related HUD messages from the camera
-        block_msg = true;
-      } else if (volkswagen_longitudinal && !volkswagen_stock_acc_engaged
-          && ((addr == MSG_ACC_02) || (addr == MSG_ACC_04) || (addr == MSG_ACC_06) || (addr == MSG_ACC_07) || (addr == MSG_ACC_13))) {
-        // openpilot takes over acceleration/braking control and related HUD messages from the stock ACC radar
-        block_msg = true;
-      }
-      break;
-    default:
-      block_msg = true;
-      break;
+        break;
+    }
   }
 
   // This is mostly to update counters to avoid duplicate messages when switching from stock to OP.
