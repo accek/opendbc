@@ -80,6 +80,9 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[0].safetyParam |= VolkswagenSafetyFlags.LONG_CONTROL.value
       if ret.transmissionType == TransmissionType.manual:
         ret.minEnableSpeed = 4.5
+      ret.longitudinalActuatorDelay = 0.5 # s
+      ret.longitudinalTuning.kiBP = [5., 35.]
+      ret.longitudinalTuning.kiV = [2.0, 1.5]
 
     ret.pcmCruise = not ret.openpilotLongitudinalControl
     ret.stopAccel = -0.55
