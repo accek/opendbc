@@ -81,8 +81,8 @@ class CarInterface(CarInterfaceBase):
       if ret.transmissionType == TransmissionType.manual:
         ret.minEnableSpeed = 4.5
       ret.longitudinalActuatorDelay = 0.5 # s
-      ret.longitudinalTuning.kiBP = [5., 35.]
-      ret.longitudinalTuning.kiV = [2.0, 1.5]
+      ret.longitudinalTuning.kiBP = [0., 5., 35.]
+      ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
 
     ret.pcmCruise = not ret.openpilotLongitudinalControl
     ret.stopAccel = -0.55
