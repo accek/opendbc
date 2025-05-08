@@ -82,7 +82,7 @@ class CarInterface(CarInterfaceBase):
         ret.minEnableSpeed = 4.5
       ret.longitudinalActuatorDelay = 0.5 # s
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
-      ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
+      ret.longitudinalTuning.kiV = [1.2, 0.4, 0.25]
 
     ret.pcmCruise = not ret.openpilotLongitudinalControl
     ret.stopAccel = -0.55
