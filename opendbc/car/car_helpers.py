@@ -152,7 +152,7 @@ def fingerprint(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_mu
 
 
 def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multiplexing: ObdCallback, alpha_long_allowed: bool,
-            is_release: bool, num_pandas: int = 1, cached_params: CarParamsT | None = None, fixed_fingerprint: str | None = None):
+            is_release: bool, prefer_torque_tune: bool = False, num_pandas: int = 1, cached_params: CarParamsT | None = None, fixed_fingerprint: str | None = None):
   candidate, fingerprints, vin, car_fw, source, exact_match = fingerprint(can_recv, can_send, set_obd_multiplexing, num_pandas, cached_params,
                                                                           fixed_fingerprint)
 
@@ -161,13 +161,13 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
     candidate = "MOCK"
 
   CarInterface = interfaces[candidate]
-  CP: CarParams = CarInterface.get_params(candidate, fingerprints, car_fw, alpha_long_allowed, is_release, docs=False)
+  CP: CarParams = CarInterface.get_params(candidate, fingerprints, car_fw, alpha_long_allowed, is_release, prefer_torque_tune, docs=False)
   CP.carVin = vin
   CP.carFw = car_fw
   CP.fingerprintSource = source
   CP.fuzzyFingerprint = not exact_match
-  CP_SP = CarInterface.get_params_sp(CP, candidate, fingerprints, car_fw, alpha_long_allowed, docs=False)
-  CP_AC = CarInterface.get_params_ac(CP, candidate, fingerprints, car_fw, alpha_long_allowed, docs=False)
+  CP_SP = CarInterface.get_params_sp(CP, candidate, fingerprints, car_fw, alpha_long_allowed, prefer_torque_tune, docs=False)
+  CP_AC = CarInterface.get_params_ac(CP, candidate, fingerprints, car_fw, alpha_long_allowed, prefer_torque_tune, docs=False)
 
   sunnypilot_interfaces(CP, can_recv, can_send)
 

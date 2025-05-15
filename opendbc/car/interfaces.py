@@ -151,7 +151,7 @@ class CarInterfaceBase(ABC):
 
   @classmethod
   def get_params(cls, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw],
-                 alpha_long: bool, is_release: bool, docs: bool) -> structs.CarParams:
+                 alpha_long: bool, is_release: bool, prefer_torque_tune: bool, docs: bool) -> structs.CarParams:
     ret = CarInterfaceBase.get_std_params(candidate)
 
     platform = PLATFORMS[candidate]
@@ -164,7 +164,7 @@ class CarInterfaceBase(ABC):
     ret.tireStiffnessFactor = platform.config.specs.tireStiffnessFactor
     ret.flags |= int(platform.config.flags)
 
-    ret = cls._get_params(ret, candidate, fingerprint, car_fw, alpha_long, is_release, docs)
+    ret = cls._get_params(ret, candidate, fingerprint, car_fw, alpha_long, is_release, prefer_torque_tune, docs)
 
     # Vehicle mass is published curb weight plus assumed payload such as a human driver; notCars have no assumed payload
     if not ret.notCar:
@@ -178,27 +178,27 @@ class CarInterfaceBase(ABC):
 
   @classmethod
   def get_params_sp(cls, car_params, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw], alpha_long: bool,
-                    docs: bool) -> structs.CarParamsSP:
+                    prefer_torque_tune: bool, docs: bool) -> structs.CarParamsSP:
     car_params_sp = structs.CarParamsSP()
 
-    return cls._get_params_sp(car_params, car_params_sp, candidate, fingerprint, car_fw, alpha_long, docs)
+    return cls._get_params_sp(car_params, car_params_sp, candidate, fingerprint, car_fw, alpha_long, prefer_torque_tune, docs)
 
   @classmethod
   def get_params_ac(cls, car_params, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw], experimental_long: bool,
-                    docs: bool) -> structs.CarParamsAC:
+                    prefer_torque_tune: bool, docs: bool) -> structs.CarParamsAC:
     car_params_ac = structs.CarParamsAC()
 
-    return cls._get_params_ac(car_params, car_params_ac, candidate, fingerprint, car_fw, experimental_long, docs)
+    return cls._get_params_ac(car_params, car_params_ac, candidate, fingerprint, car_fw, experimental_long, prefer_torque_tune, docs)
 
   @staticmethod
   @abstractmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint: dict[int, dict[int, int]],
-                  car_fw: list[structs.CarParams.CarFw], alpha_long: bool, is_release: bool, docs: bool) -> structs.CarParams:
+                  car_fw: list[structs.CarParams.CarFw], alpha_long: bool, is_release: bool, prefer_torque_tune: bool, docs: bool) -> structs.CarParams:
     raise NotImplementedError
 
   @staticmethod
   def _get_params_sp(stock_cp: structs.CarParams, ret: structs.CarParamsSP, candidate, fingerprint: dict[int, dict[int, int]],
-                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, docs: bool) -> structs.CarParamsSP:
+                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, prefer_torque_tune: bool, docs: bool) -> structs.CarParamsSP:
     carlog.warning(f"Car {candidate} does not have a _get_params_sp method, using defaults")
     return ret
 
@@ -214,7 +214,7 @@ class CarInterfaceBase(ABC):
 
   @staticmethod
   def _get_params_ac(stock_cp: structs.CarParams, ret: structs.CarParamsAC, candidate, fingerprint: dict[int, dict[int, int]],
-                     car_fw: list[structs.CarParams.CarFw], experimental_long: bool, docs: bool) -> structs.CarParamsAC:
+                     car_fw: list[structs.CarParams.CarFw], experimental_long: bool, prefer_torque_tune: bool, docs: bool) -> structs.CarParamsAC:
     carlog.warning(f"Car {candidate} does not have a _get_params_ac method, using defaults")
     return ret
 

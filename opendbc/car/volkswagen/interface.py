@@ -10,7 +10,7 @@ class CarInterface(CarInterfaceBase):
   CarController = CarController
 
   @staticmethod
-  def _get_params(ret: structs.CarParams, candidate: CAR, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
+  def _get_params(ret: structs.CarParams, candidate: CAR, fingerprint, car_fw, alpha_long, is_release, prefer_torque_tune, docs) -> structs.CarParams:
     ret.brand = "volkswagen"
     ret.radarUnavailable = True
 
@@ -65,11 +65,14 @@ class CarInterface(CarInterfaceBase):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
     else:
       ret.steerActuatorDelay = 0.1
-      ret.lateralTuning.pid.kpBP = [0.]
-      ret.lateralTuning.pid.kiBP = [0.]
-      ret.lateralTuning.pid.kf = 0.00006
-      ret.lateralTuning.pid.kpV = [0.6]
-      ret.lateralTuning.pid.kiV = [0.2]
+      if prefer_torque_tune:
+        CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      else:
+        ret.lateralTuning.pid.kpBP = [0.]
+        ret.lateralTuning.pid.kiBP = [0.]
+        ret.lateralTuning.pid.kf = 0.00006
+        ret.lateralTuning.pid.kpV = [0.6]
+        ret.lateralTuning.pid.kiV = [0.2]
 
     # Global longitudinal tuning defaults, can be overridden per-vehicle
 
@@ -94,7 +97,7 @@ class CarInterface(CarInterfaceBase):
 
   @staticmethod
   def _get_params_ac(stock_cp: structs.CarParams, ret: structs.CarParamsAC, candidate, fingerprint: dict[int, dict[int, int]],
-                     car_fw: list[structs.CarParams.CarFw], experimental_long: bool, docs: bool) -> structs.CarParamsAC:
+                     car_fw: list[structs.CarParams.CarFw], experimental_long: bool, prefer_torque_tune: bool, docs: bool) -> structs.CarParamsAC:
     if not (stock_cp.flags & VolkswagenFlags.PQ):
       if experimental_long:
         ret.stockAccOverrideAvailable = True
