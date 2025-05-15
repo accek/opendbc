@@ -175,6 +175,8 @@ def create_acc_accel_control_2(values, acc_type, accel, acc_control, stopping, s
 
   if stopping_distance is None:
     stopping_distance = 0.3
+  elif stopping_distance > 20:
+    stopping_distance = 20.0
 
   values = {
     "COUNTER": values["COUNTER"],
