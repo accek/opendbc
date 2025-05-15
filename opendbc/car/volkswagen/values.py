@@ -49,6 +49,8 @@ class CarControllerParams:
   STOCK_ACC_MIN_SET_SPEED = 30.0 * CV.KPH_TO_MS
   STOCK_ACC_MAX_SET_SPEED = 250.0 * CV.KPH_TO_MS
 
+  STOP_DISTANCE = 2.0
+
   def __init__(self, CP):
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 

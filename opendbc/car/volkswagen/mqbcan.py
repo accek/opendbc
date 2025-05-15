@@ -126,7 +126,7 @@ def acc_hud_status_value(cruise_available, gas_pressed, acc_faulted, long_active
   return acc_control_value(cruise_available, gas_pressed, acc_faulted, long_active)
 
 
-def create_acc_accel_control_1(values, acc_type, accel, acc_control, stopping, starting, esp_hold, lead_accel, actual_speed, actual_accel):
+def create_acc_accel_control_1(values, acc_type, accel, acc_control, stopping, starting, esp_hold, lead_accel, stopping_distance, actual_speed, actual_accel):
   acc_enabled = acc_control in (3, 4)
 
   if acc_enabled and not esp_hold:
@@ -161,7 +161,7 @@ def create_acc_accel_control_1(values, acc_type, accel, acc_control, stopping, s
   return values
 
 
-def create_acc_accel_control_2(values, acc_type, accel, acc_control, stopping, starting, esp_hold, lead_accel, actual_speed, actual_accel):
+def create_acc_accel_control_2(values, acc_type, accel, acc_control, stopping, starting, esp_hold, lead_accel, stopping_distance, actual_speed, actual_accel):
   acc_enabled = acc_control in (3, 4)
 
   if starting:
@@ -173,9 +173,12 @@ def create_acc_accel_control_2(values, acc_type, accel, acc_control, stopping, s
   else:
     acc_hold_type = 0
 
+  if stopping_distance is None:
+    stopping_distance = 0.3
+
   values = {
     "COUNTER": values["COUNTER"],
-    "ACC_Anhalteweg": 0.3 if stopping else 20.46,  # Distance to stop (stopping coordinator handles terminal roll-out)
+    "ACC_Anhalteweg": stopping_distance if stopping else 20.46,  # Distance to stop (stopping coordinator handles terminal roll-out)
     "ACC_Freilauf_Info": 2 if acc_enabled else 0,
     "ACC_Folgebeschl": clip(lead_accel, -4.6, 2.99) if lead_accel is not None else 3.02,
     "ACC_Sollbeschleunigung_02": accel if acc_enabled else 3.01,

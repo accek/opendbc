@@ -123,12 +123,13 @@ class CarController(CarControllerBase):
       near_stop = stopping and CS.out.vEgo < self.CP.vEgoStopping
       starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
       lead_accel = CC_AC.hudControl.leadAccel if not np.isnan(CC_AC.hudControl.leadAccel) else None
+      stopping_distance = max(0.0, CC_AC.hudControl.leadDistance - self.CCP.STOPPING_DISTANCE) if CC_AC.hudControl.leadDistance >= 0.0 else None
       self.forward_message(CS, self.CCS.MSG_ACC_1, CANBUS.pt, can_sends, self.CCS.create_acc_accel_control_1, CS.acc_type, accel,
                                                         acc_control, near_stop, starting, CS.esp_hold_confirmation, lead_accel,
-                                                        CS.out.vEgo, CS.out.aEgo)
+                                                        stopping_distance, CS.out.vEgo, CS.out.aEgo)
       self.forward_message(CS, self.CCS.MSG_ACC_2, CANBUS.pt, can_sends, self.CCS.create_acc_accel_control_2, CS.acc_type, accel,
                                                         acc_control, near_stop, starting, CS.esp_hold_confirmation, lead_accel,
-                                                        CS.out.vEgo, CS.out.aEgo)
+                                                        stopping_distance, CS.out.vEgo, CS.out.aEgo)
       self.forward_message(CS, self.CCS.MSG_TSK, CANBUS.cam, can_sends, self.CCS.create_tsk_update, CS.stock_values)
 
       #if self.aeb_available:
