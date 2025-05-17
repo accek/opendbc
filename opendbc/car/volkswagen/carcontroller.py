@@ -29,6 +29,7 @@ class CarController(CarControllerBase):
     self.hca_frame_same_torque = 0
     self.stock_acc_button = None
     self.stock_acc_button_pressed_frame = None
+    self.last_lead_distance_value = 0.0
 
   def update(self, CC, CC_SP, CC_AC, CS, now_nanos):
     actuators = CC.actuators
@@ -208,7 +209,13 @@ class CarController(CarControllerBase):
     if distance > 0:
       t_lead = distance / v_ego
       scale_fraction = (t_lead - min_relative_time) / (max_relative_time - min_relative_time)
-      return round(np.clip(scale_fraction, 0.0, 1.0) * (max_value - min_value)) + min_value
+      lead_distance_value = np.clip(scale_fraction, 0.0, 1.0) * (max_value - min_value) + min_value
+      # apply some hysteresis to avoid oscillation
+      if abs(lead_distance_value - self.last_lead_distance_value) > 0.5:
+        self.last_lead_distance_value = lead_distance_value
+      else:
+        lead_distance_value = self.last_lead_distance_value
+      return round(lead_distance_value)
     else:
       return max_value if hud_control.leadVisible else 0
 
