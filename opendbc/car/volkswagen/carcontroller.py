@@ -185,7 +185,8 @@ class CarController(CarControllerBase):
         set_speed_ms = None
       can_switch_acc = not CS.out.brakePressed and not cancel_pressed
       stock_acc_requested = CC_AC.stockAccOverrideActive and can_switch_acc
-      stock_acc_button = self.calculate_stock_acc_button(CS, set_speed_ms, stock_acc_requested)
+      starting = actuators.longControlState == LongCtrlState.pid and CS.esp_hold_confirmation
+      stock_acc_button = self.calculate_stock_acc_button(CS, set_speed_ms, stock_acc_requested, starting)
       self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, CANBUS.cam, can_sends, self.CCS.create_acc_buttons_control,
                            frame='auto', buttons=stock_acc_button,
                            cancel=(CS.out_ac.stockAccOverride and not CC_AC.stockAccOverrideActive),
@@ -251,7 +252,7 @@ class CarController(CarControllerBase):
         return False
     can_sends.append(self.packer_pt.make_can_msg(msg_name, to_bus, new_values))
 
-  def calculate_stock_acc_button(self, CS, target_set_speed, stock_acc_requested):
+  def calculate_stock_acc_button(self, CS, target_set_speed, stock_acc_requested, starting):
     if not CS.out.cruiseState.available:
       return 0
     stock_set_speed = CS.stock_acc_set_speed
@@ -289,7 +290,7 @@ class CarController(CarControllerBase):
       self.stock_acc_button = 2
       self.stock_acc_button_pressed_frame = self.frame
       return 2
-    elif not CS.out_ac.stockAccOverride and stock_acc_requested:
+    elif (not CS.out_ac.stockAccOverride and stock_acc_requested) or (CS.out_ac.stockAccOverride and starting):
       self.stock_acc_button = 3
       self.stock_acc_button_pressed_frame = self.frame
       return 3
