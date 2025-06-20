@@ -77,7 +77,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     # Main button also can trigger an engagement on these cars
     return any(btn in ENABLE_BUTTONS for btn in self.cruise_buttons) or any(self.main_buttons)
 
-  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
+  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP, structs.CarStateAC]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
 
@@ -86,6 +86,8 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
 
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
+    ret_ac = structs.CarStateAC()
+
     cp_cruise = cp_cam if self.CP.flags & HyundaiFlags.CAMERA_SCC else cp
     self.is_metric = cp.vl["CLU11"]["CF_Clu_SPEED_UNIT"] == 0
     speed_conv = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
@@ -221,14 +223,15 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
 
-    return ret, ret_sp
+    return ret, ret_sp, ret_ac
 
-  def update_canfd(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
+  def update_canfd(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP, structs.CarStateAC]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
 
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
+    ret_ac = structs.CarStateAC()
 
     self.is_metric = cp.vl["CRUISE_BUTTONS_ALT"]["DISTANCE_UNIT"] != 1
     speed_factor = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
@@ -324,7 +327,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
 
     ret.blockPcmEnable = not self.recent_button_interaction()
 
-    return ret, ret_sp
+    return ret, ret_sp, ret_ac
 
   def get_can_parsers_canfd(self, CP):
     pt_messages = [

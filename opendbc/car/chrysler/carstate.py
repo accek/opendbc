@@ -28,12 +28,13 @@ class CarState(CarStateBase, MadsCarState):
 
     self.distance_button = 0
 
-  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
+  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP, structs.CarStateAC]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
 
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
+    ret_ac = structs.CarStateAC()
 
     prev_distance_button = self.distance_button
     self.distance_button = cp.vl["CRUISE_BUTTONS"]["ACC_Distance_Dec"]
@@ -115,7 +116,7 @@ class CarState(CarStateBase, MadsCarState):
       *create_button_events(self.lkas_button, self.prev_lkas_button, {1: ButtonType.lkas}),
     ]
 
-    return ret, ret_sp
+    return ret, ret_sp, ret_ac
 
   @staticmethod
   def get_cruise_messages():

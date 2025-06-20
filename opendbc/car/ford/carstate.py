@@ -24,12 +24,13 @@ class CarState(CarStateBase, MadsCarState):
     self.distance_button = 0
     self.lc_button = 0
 
-  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
+  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP, structs.CarStateAC]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
 
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
+    ret_ac = structs.CarStateAC()
 
     # Occasionally on startup, the ABS module recalibrates the steering pinion offset, so we need to block engagement
     # The vehicle usually recovers out of this state within a minute of normal driving
@@ -123,7 +124,7 @@ class CarState(CarStateBase, MadsCarState):
       *create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise}),
       *create_button_events(self.lc_button, prev_lc_button, {1: ButtonType.lkas}),
     ]
-    return ret, ret_sp
+    return ret, ret_sp, ret_ac
 
   @staticmethod
   def get_can_parsers(CP, CP_SP, CP_AC):

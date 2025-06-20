@@ -105,7 +105,7 @@ class CarState(CarStateBase):
     # However, on cars without a digital speedometer this is not always present (HRV, FIT, CRV 2016, ILX and RDX)
     self.dash_speed_seen = False
 
-  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
+  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP, structs.CarStateAC]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     if self.CP.enableBsm:
@@ -113,6 +113,7 @@ class CarState(CarStateBase):
 
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
+    ret_ac = structs.CarStateAC()
 
     # car params
     v_weight_v = [0., 1.]  # don't trust smooth speed at low values to avoid premature zero snapping
@@ -277,7 +278,7 @@ class CarState(CarStateBase):
       *create_button_events(self.cruise_setting, prev_cruise_setting, SETTINGS_BUTTONS_DICT),
     ]
 
-    return ret, ret_sp
+    return ret, ret_sp, ret_ac
 
   def get_can_parsers(self, CP, CP_SP, CP_AC):
     pt_messages = get_can_messages(CP, self.gearbox_msg)

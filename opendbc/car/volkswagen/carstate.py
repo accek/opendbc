@@ -45,7 +45,7 @@ class CarState(CarStateBase):
 
     return button_events
 
-  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
+  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP, structs.CarStateAC]:
     pt_cp = can_parsers[Bus.pt]
     cam_cp = can_parsers[Bus.cam]
     ext_cp = pt_cp if self.CP.networkLocation == NetworkLocation.fwdCamera else cam_cp
@@ -55,6 +55,7 @@ class CarState(CarStateBase):
 
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
+    ret_ac = structs.CarStateAC()
 
     if self.CP.transmissionType == TransmissionType.direct:
       ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(pt_cp.vl["Motor_EV_01"]["MO_Waehlpos"], None))
@@ -153,12 +154,31 @@ class CarState(CarStateBase):
 
     ret.lowSpeedAlert = self.update_low_speed_alert(ret.vEgo)
 
-    self.frame += 1
-    return ret, ret_sp
+    ret_ac.accFaultedTemporary = pt_cp.vl["TSK_06"]["TSK_Status"] == 6 or \
+                              ext_cp.vl["ACC_06"]["ACC_Status_ACC"] == 6
+    ret_ac.screenBrightness = pt_cp.vl["Dimmung_01"]["DI_KL_58xd"] / 100.0
+    ret_ac.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS_AC, self.button_states_ac, event_class=structs.CarStateAC.ButtonEvent)
 
-  def update_pq(self, pt_cp, cam_cp, ext_cp) -> tuple[structs.CarState, structs.CarStateSP]:
+    if self.CP.openpilotLongitudinalControl:
+      self.update_stock_values("ACC_02", ext_cp)
+      self.update_stock_values("ACC_04", ext_cp)
+      self.update_stock_values("ACC_06", ext_cp)
+      self.update_stock_values("ACC_07", ext_cp)
+      self.update_stock_values("ACC_13", ext_cp)
+      self.update_stock_values("TSK_06", pt_cp)
+      stock_acc_status = ext_cp.vl["ACC_06"]["ACC_Status_ACC"]
+      stock_acc_desired_accel = ext_cp.vl["ACC_06"]["ACC_Sollbeschleunigung_02"]
+      ret_ac.stockAccOverride = (stock_acc_status in (3, 4) and stock_acc_desired_accel < 3.005) or stock_acc_status in (5, 6, 7)
+      self.stock_acc_set_speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS
+
+    self.frame += 1
+    return ret, ret_sp, ret_ac
+
+  def update_pq(self, pt_cp, cam_cp, ext_cp) -> tuple[structs.CarState, structs.CarStateSP, structs.CarStateAC]:
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
+    ret_ac = structs.CarStateAC()
+
     # Update vehicle speed and acceleration from ABS wheel speeds.
     ret.wheelSpeeds = self.get_wheel_speeds(
       pt_cp.vl["Bremse_3"]["Radgeschw__VL_4_1"],
@@ -256,7 +276,7 @@ class CarState(CarStateBase):
     ret.lowSpeedAlert = self.update_low_speed_alert(ret.vEgo)
 
     self.frame += 1
-    return ret, ret_sp
+    return ret, ret_sp, ret_ac
 
   def update_low_speed_alert(self, v_ego: float) -> bool:
     # Low speed steer alert hysteresis logic
@@ -280,36 +300,6 @@ class CarState(CarStateBase):
     perm_fault = hca_status == "DISABLED" or (self.eps_init_complete and hca_status in ("INITIALIZING", "FAULT"))
     temp_fault = hca_status in ("REJECTED", "PREEMPTED")
     return temp_fault, perm_fault
-
-  def update_ac(self, can_parsers) -> structs.CarStateAC:
-    if self.CP.flags & VolkswagenFlags.PQ:
-      # PQ not supported yet
-      return super().update_ac(can_parsers)
-
-    pt_cp = can_parsers[Bus.pt]
-    cam_cp = can_parsers[Bus.cam]
-    ext_cp = pt_cp if self.CP.networkLocation == NetworkLocation.fwdCamera else cam_cp
-
-    ret = structs.CarStateAC()
-
-    ret.accFaultedTemporary = pt_cp.vl["TSK_06"]["TSK_Status"] == 6 or \
-                              ext_cp.vl["ACC_06"]["ACC_Status_ACC"] == 6
-    ret.screenBrightness = pt_cp.vl["Dimmung_01"]["DI_KL_58xd"] / 100.0
-    ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS_AC, self.button_states_ac, event_class=structs.CarStateAC.ButtonEvent)
-
-    if self.CP.openpilotLongitudinalControl:
-      self.update_stock_values("ACC_02", ext_cp)
-      self.update_stock_values("ACC_04", ext_cp)
-      self.update_stock_values("ACC_06", ext_cp)
-      self.update_stock_values("ACC_07", ext_cp)
-      self.update_stock_values("ACC_13", ext_cp)
-      self.update_stock_values("TSK_06", pt_cp)
-      stock_acc_status = ext_cp.vl["ACC_06"]["ACC_Status_ACC"]
-      stock_acc_desired_accel = ext_cp.vl["ACC_06"]["ACC_Sollbeschleunigung_02"]
-      ret.stockAccOverride = (stock_acc_status in (3, 4) and stock_acc_desired_accel < 3.005) or stock_acc_status in (5, 6, 7)
-      self.stock_acc_set_speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS
-
-    return ret
 
   @staticmethod
   def get_can_parsers(CP, CP_SP, CP_AC):
