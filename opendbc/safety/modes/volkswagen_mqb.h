@@ -52,10 +52,10 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
   static const CanMsg VOLKSWAGEN_MQB_STOCK_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_GRA_ACC_01, 0, 8, .check_relay = false}, {MSG_GRA_ACC_01, 2, 8, .check_relay = false},
                                                         {MSG_LDW_02, 0, 8, .check_relay = true}, {MSG_LH_EPS_03, 2, 8, .check_relay = true}};
 
-  static const CanMsg VOLKSWAGEN_MQB_LONG_TX_MSGS[] = {{MSG_HCA_01, 0, 8, true}, {MSG_GRA_ACC_01, 2, 8, false},
-                                                       {MSG_LDW_02, 0, 8, false}, {MSG_LH_EPS_03, 2, 8, false}, {MSG_TSK_06, 2, 8, false},
-                                                       {MSG_ACC_02, 0, 8, false}, {MSG_ACC_04, 0, 8, false}, {MSG_ACC_06, 0, 8, false},
-                                                       {MSG_ACC_07, 0, 8, false}, {MSG_ACC_13, 0, 8, false}};
+  static const CanMsg VOLKSWAGEN_MQB_LONG_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_GRA_ACC_01, 2, 8, .check_relay = false},
+                                                       {MSG_LDW_02, 0, 8, .check_relay = false}, {MSG_LH_EPS_03, 2, 8, .check_relay = false}, {MSG_TSK_06, 2, 8, .check_relay = false},
+                                                       {MSG_ACC_02, 0, 8, .check_relay = false}, {MSG_ACC_04, 0, 8, .check_relay = false}, {MSG_ACC_06, 0, 8, .check_relay = false},
+                                                       {MSG_ACC_07, 0, 8, .check_relay = false}, {MSG_ACC_13, 0, 8, .check_relay = false}};
 
   static RxCheck volkswagen_mqb_rx_checks[] = {
     {.msg = {{MSG_ESP_19, 0, 8, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true, .frequency = 100U}, { 0 }, { 0 }}},
@@ -285,7 +285,9 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *to_send) {
   return tx;
 }
 
-static bool volkswagen_mqb_fwd_hook(int bus_num, int addr) {
+static bool volkswagen_mqb_fwd_hook(const CANPacket_t *to_push) {
+  int bus_num = GET_BUS(to_push);
+  int addr = GET_ADDR(to_push);
   bool block_msg = false;
 
   // If we didn't attempt any tx yet, just forward everything until we send the first message.

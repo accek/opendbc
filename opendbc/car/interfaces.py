@@ -287,7 +287,7 @@ class CarInterfaceBase(ABC):
     tune.torque.latAccelOffset = 0.0
     tune.torque.steeringAngleDeadzoneDeg = steering_angle_deadzone_deg
 
-  def update(self, can_packets: list[tuple[int, list[CanData]]]) -> tuple[structs.CarState, structs.CatStateSP, structs.CarStateAC]:
+  def update(self, can_packets: list[tuple[int, list[CanData]]]) -> tuple[structs.CarState, structs.CarStateSP, structs.CarStateAC]:
     # parse can
     for cp in self.can_parsers.values():
       if cp is not None:
