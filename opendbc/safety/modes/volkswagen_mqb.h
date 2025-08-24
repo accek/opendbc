@@ -187,8 +187,8 @@ static void volkswagen_mqb_rx_hook(const CANPacket_t *msg) {
   }
 }
 
-static bool volkswagen_mqb_long_counter_check_and_update(const CANPacket_t *msg, int8_t tx_bus) {
-  int addr = GET_ADDR(msg);
+static bool volkswagen_mqb_long_counter_check_and_update(const CANPacket_t *msg, uint8_t tx_bus) {
+  int addr = msg->addr;
   for (MqbCounterCheck* check = &volkswagen_mqb_long_counter_checks[0]; check->msg.addr != -1; check++) {
     if (check->msg.addr == addr && check->msg.bus == tx_bus) {
       uint8_t counter = volkswagen_mqb_meb_get_counter(msg);
@@ -214,8 +214,6 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *msg) {
     .type = TorqueDriverLimited,
   };
 
-  int addr = GET_ADDR(msg);
-  int bus = GET_BUS(msg);
   bool tx = true;
 
   volkswagen_mqb_tx_attempted = true;
@@ -262,7 +260,7 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *msg) {
 
   // FORCE CANCEL: ensuring that only the cancel button press is sent when controls are off.
   // This avoids unintended engagements while still allowing resume spam
-  if ((addr == MSG_GRA_ACC_01) && !controls_allowed) {
+  if ((msg->addr == MSG_GRA_ACC_01) && !controls_allowed) {
     bool is_set_cruise = GET_BIT(msg, 16U) != 0U;
     bool is_resume_cruise = GET_BIT(msg, 19U) != 0U;
     bool is_accel_cruise = GET_BIT(msg, 17U) != 0U;
@@ -277,21 +275,20 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *msg) {
 
   // Do not allow injecting ACC messages if we forward them from the stock ACC module
   if (volkswagen_longitudinal && tx) {
-    tx = volkswagen_mqb_long_counter_check_and_update(msg, bus);
+    tx = volkswagen_mqb_long_counter_check_and_update(msg, msg->bus);
   }
 
   return tx;
 }
 
-static bool volkswagen_mqb_fwd_hook(const CANPacket_t *to_push) {
-  int bus_num = GET_BUS(to_push);
-  int addr = GET_ADDR(to_push);
+static bool volkswagen_mqb_fwd_hook(const CANPacket_t *msg) {
+  int addr = msg->addr;
   bool block_msg = false;
 
   // If we didn't attempt any tx yet, just forward everything until we send the first message.
   if (volkswagen_mqb_tx_attempted) {
-    switch (bus_num) {
-      case 0:
+    switch (msg->bus) {
+      case 0U:
         if (addr == MSG_LH_EPS_03) {
           // openpilot needs to replace apparent driver steering input torque to pacify VW Emergency Assist
           block_msg = true;
@@ -304,10 +301,10 @@ static bool volkswagen_mqb_fwd_hook(const CANPacket_t *to_push) {
           block_msg = true;
         }
         break;
-      case 2:
+      case 2U:
         if (volkswagen_longitudinal && addr == MSG_ACC_06) {
-          int acc_status = (GET_BYTE(to_push, 7) & 0x70U) >> 4;
-          int desired_accel = ((((GET_BYTE(to_push, 4) & 0x7U) << 8) | GET_BYTE(to_push, 3)) * 5U) - 7220U;
+          int acc_status = (msg->data[7] & 0x70U) >> 4;
+          int desired_accel = ((((msg->data[4] & 0x7U) << 8) | msg->data[3]) * 5U) - 7220U;
           volkswagen_stock_acc_engaged =
               (((acc_status == 3) || (acc_status == 4)) && desired_accel < VOLKSWAGEN_MQB_LONG_LIMITS.inactive_accel) ||
               (acc_status == 5) || (acc_status == 6) || (acc_status == 7);
@@ -330,7 +327,7 @@ static bool volkswagen_mqb_fwd_hook(const CANPacket_t *to_push) {
   // This is mostly to update counters to avoid duplicate messages when switching from stock to OP.
   // The check should never fail.
   if (volkswagen_longitudinal && !block_msg) {
-    if (!volkswagen_mqb_long_counter_check_and_update(to_push, bus_num == 0 ? 2 : 0)) {
+    if (!volkswagen_mqb_long_counter_check_and_update(msg, msg->bus == 0U ? 2U : 0U)) {
       block_msg = true;
     }
   }

@@ -288,25 +288,23 @@ static bool tesla_tx_hook(const CANPacket_t *msg) {
   return tx;
 }
 
-static bool tesla_fwd_hook(const CANPacket_t *to_push) {
-  int bus_num = GET_BUS(to_push);
-  int addr = GET_ADDR(to_push);
+static bool tesla_fwd_hook(const CANPacket_t *msg) {
   bool block_msg = false;
 
-  if (bus_num == 2) {
+  if (msg->bus == 2U) {
     if (!tesla_autopark) {
       // APS_eacMonitor
-      if (addr == 0x27d) {
+      if (msg->addr == 0x27dU) {
         block_msg = true;
       }
 
       // DAS_steeringControl
-      if ((addr == 0x488) && !tesla_stock_lkas) {
+      if ((msg->addr == 0x488U) && !tesla_stock_lkas) {
         block_msg = true;
       }
 
       // DAS_control
-      if (tesla_longitudinal && (addr == 0x2b9) && !tesla_stock_aeb) {
+      if (tesla_longitudinal && (msg->addr == 0x2b9U) && !tesla_stock_aeb) {
         block_msg = true;
       }
     }
