@@ -1,11 +1,12 @@
 import math
 import numpy as np
-from opendbc.can.packer import CANPacker
-from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, structs
+from opendbc.can import CANPacker
+from opendbc.car import Bus, DT_CTRL, structs
+from opendbc.car.lateral import apply_driver_steer_torque_limits
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.volkswagen import mqbcan, pqcan
-from opendbc.car.volkswagen.values import CANBUS, CarControllerParams, VolkswagenFlags
+from opendbc.car.volkswagen.values import CanBus, CarControllerParams, VolkswagenFlags
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 AudibleAlert = structs.CarControl.HUDControl.AudibleAlert
@@ -17,9 +18,9 @@ class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP, CP_SP, CP_AC):
     super().__init__(dbc_names, CP, CP_SP, CP_AC)
     self.CCP = CarControllerParams(CP)
+    self.CAN = CanBus(CP)
     self.CCS = pqcan if CP.flags & VolkswagenFlags.PQ else mqbcan
     self.packer_pt = CANPacker(dbc_names[Bus.pt])
-    self.ext_bus = CANBUS.pt if CP.networkLocation == structs.CarParams.NetworkLocation.fwdCamera else CANBUS.cam
     self.aeb_available = not CP.flags & VolkswagenFlags.PQ
 
     self.apply_torque_last = 0
@@ -92,7 +93,7 @@ class CarController(CarControllerBase):
 
       self.eps_timer_soft_disable_alert = self.hca_frame_timer_running > self.CCP.STEER_TIME_ALERT / DT_CTRL
       self.apply_torque_last = apply_torque
-      self.forward_message(CS, self.CCS.MSG_STEERING, CANBUS.pt, can_sends, self.CCS.create_steering_control,
+      self.forward_message(CS, self.CCS.MSG_STEERING, self.CAN.pt, can_sends, self.CCS.create_steering_control,
                            apply_torque, hca_enabled, ignore_counter=True, require_stock_values=False)
 
     if self.CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT and self.can_forward_message(CS, self.CCS.MSG_EPS):
@@ -106,7 +107,7 @@ class CarController(CarControllerBase):
       if CC_AC.stockDriverMonitoring:
         sim_torque = 0
       ea_simulated_torque = np.clip(CS.out.steeringTorque - sign*sim_torque, -self.CCP.STEER_MAX, self.CCP.STEER_MAX)
-      self.forward_message(CS, self.CCS.MSG_EPS, CANBUS.cam, can_sends, self.CCS.create_eps_update, ea_simulated_torque)
+      self.forward_message(CS, self.CCS.MSG_EPS, self.CAN.cam, can_sends, self.CCS.create_eps_update, ea_simulated_torque)
 
     # **** Acceleration Controls ******************************************** #
 
@@ -125,13 +126,13 @@ class CarController(CarControllerBase):
       starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
       lead_accel = CC_AC.hudControl.leadAccel if not np.isnan(CC_AC.hudControl.leadAccel) else None
       stopping_distance = max(0.0, CC_AC.hudControl.leadDistance - self.CCP.STOP_DISTANCE) if CC_AC.hudControl.leadDistance >= 0.0 else None
-      self.forward_message(CS, self.CCS.MSG_ACC_1, CANBUS.pt, can_sends, self.CCS.create_acc_accel_control_1, CS.acc_type, accel,
+      self.forward_message(CS, self.CCS.MSG_ACC_1, self.CAN.pt, can_sends, self.CCS.create_acc_accel_control_1, CS.acc_type, accel,
                                                         acc_control, near_stop, starting, CS.esp_hold_confirmation, lead_accel,
                                                         stopping_distance, CS.out.vEgo, CS.out.aEgo)
-      self.forward_message(CS, self.CCS.MSG_ACC_2, CANBUS.pt, can_sends, self.CCS.create_acc_accel_control_2, CS.acc_type, accel,
+      self.forward_message(CS, self.CCS.MSG_ACC_2, self.CAN.pt, can_sends, self.CCS.create_acc_accel_control_2, CS.acc_type, accel,
                                                         acc_control, near_stop, starting, CS.esp_hold_confirmation, lead_accel,
                                                         stopping_distance, CS.out.vEgo, CS.out.aEgo)
-      self.forward_message(CS, self.CCS.MSG_TSK, CANBUS.cam, can_sends, self.CCS.create_tsk_update, CS.stock_values)
+      self.forward_message(CS, self.CCS.MSG_TSK, self.CAN.cam, can_sends, self.CCS.create_tsk_update, CS.stock_values)
 
       #if self.aeb_available:
       #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:
@@ -150,7 +151,7 @@ class CarController(CarControllerBase):
           hud_alert = self.CCP.LDW_MESSAGES["laneAssistTakeOverUrgent"]
         else:
           hud_alert = self.CCP.LDW_MESSAGES["laneAssistTakeOverChime"]
-      self.forward_message(CS, self.CCS.MSG_LKA_HUD, CANBUS.pt, can_sends, self.CCS.create_lka_hud_control,
+      self.forward_message(CS, self.CCS.MSG_LKA_HUD, self.CAN.pt, can_sends, self.CCS.create_lka_hud_control,
                            hud_alert, hud_control, CC_SP.mads)
 
     if self.CP.openpilotLongitudinalControl:
@@ -163,15 +164,16 @@ class CarController(CarControllerBase):
           self.can_forward_message(CS, self.CCS.MSG_ACC_HUD_3):
         lead_distance = self.calculate_lead_distance(CS.out.vEgo, hud_control, CS.upscale_lead_car_signal, CC_AC.hudControl.leadDistance)
         acc_hud_status = self.CCS.acc_hud_status_value(CS.out.cruiseState.available, acc_override, CS.out.accFaulted, acc_active)
-        # FIXME: follow the recent displayed-speed updates, also use mph_kmh toggle to fix display rounding problem?
+        # FIXME: PQ may need to use the on-the-wire mph/kmh toggle to fix rounding errors
+        # FIXME: Detect clusters with vEgoCluster offsets and apply an identical vCruiseCluster offset
         set_speed = hud_control.setSpeed * CV.MS_TO_KPH
         current_speed = CS.out.vEgo * CV.MS_TO_KPH
         set_speed_reached = abs(set_speed - current_speed) <= 3
-        self.forward_message(CS, self.CCS.MSG_ACC_HUD_1, CANBUS.pt, can_sends, self.CCS.create_acc_hud_control_1,
+        self.forward_message(CS, self.CCS.MSG_ACC_HUD_1, self.CAN.pt, can_sends, self.CCS.create_acc_hud_control_1,
                             acc_hud_status, set_speed, set_speed_reached, lead_distance, hud_control.leadDistanceBars)
-        self.forward_message(CS, self.CCS.MSG_ACC_HUD_2, CANBUS.pt, can_sends, self.CCS.create_acc_hud_control_2,
+        self.forward_message(CS, self.CCS.MSG_ACC_HUD_2, self.CAN.pt, can_sends, self.CCS.create_acc_hud_control_2,
                             acc_hud_status, set_speed, set_speed_reached, lead_distance, hud_control.leadDistanceBars)
-        self.forward_message(CS, self.CCS.MSG_ACC_HUD_3, CANBUS.pt, can_sends, self.CCS.create_acc_hud_control_3,
+        self.forward_message(CS, self.CCS.MSG_ACC_HUD_3, self.CAN.pt, can_sends, self.CCS.create_acc_hud_control_3,
                             acc_hud_status, set_speed, set_speed_reached, lead_distance, hud_control.leadDistanceBars)
 
     # **** Stock ACC Button Controls **************************************** #
@@ -187,7 +189,7 @@ class CarController(CarControllerBase):
       stock_acc_requested = CC_AC.stockAccOverrideActive and can_switch_acc
       starting = actuators.longControlState == LongCtrlState.pid and CS.esp_hold_confirmation
       stock_acc_button = self.calculate_stock_acc_button(CS, set_speed_ms, stock_acc_requested, starting)
-      self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, CANBUS.cam, can_sends, self.CCS.create_acc_buttons_control,
+      self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, self.CAN.cam, can_sends, self.CCS.create_acc_buttons_control,
                            frame='auto', buttons=stock_acc_button,
                            cancel=(CS.out_ac.stockAccOverride and not CC_AC.stockAccOverrideActive),
                            stock_gap_control=(CC_AC.stockAccOverrideArmed or CS.out_ac.stockAccOverride))

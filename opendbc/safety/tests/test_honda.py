@@ -8,7 +8,10 @@ import opendbc.safety.tests.common as common
 from opendbc.car.structs import CarParams
 from opendbc.safety.tests.common import CANPackerPanda, MAX_WRONG_COUNTERS
 
+from opendbc.sunnypilot.car.honda.values_ext import HondaSafetyFlagsSP
+
 HONDA_N_COMMON_TX_MSGS = [[0xE4, 0], [0x194, 0], [0x1FA, 0], [0x30C, 0], [0x33D, 0]]
+
 
 class Btn:
   NONE = 0
@@ -89,21 +92,21 @@ class HondaButtonEnableBase(common.PandaCarSafetyTest):
 
     # TODO: move this test to common
     # checksum checks
-    for msg in ["btn", "gas", "speed"]:
+    for msg_type in ["btn", "gas", "speed"]:
       self.safety.set_controls_allowed(1)
-      if msg == "btn":
-        to_push = self._button_msg(Btn.SET)
-      if msg == "gas":
-        to_push = self._user_gas_msg(0)
-      if msg == "speed":
-        to_push = self._speed_msg(0)
-      self.assertTrue(self._rx(to_push))
-      if msg != "btn":
-        to_push[0].data[4] = 0  # invalidate checksum
-        to_push[0].data[5] = 0
-        to_push[0].data[6] = 0
-        to_push[0].data[7] = 0
-        self.assertFalse(self._rx(to_push))
+      if msg_type == "btn":
+        msg = self._button_msg(Btn.SET)
+      if msg_type == "gas":
+        msg = self._user_gas_msg(0)
+      if msg_type == "speed":
+        msg = self._speed_msg(0)
+      self.assertTrue(self._rx(msg))
+      if msg_type != "btn":
+        msg[0].data[4] = 0  # invalidate checksum
+        msg[0].data[5] = 0
+        msg[0].data[6] = 0
+        msg[0].data[7] = 0
+        self.assertFalse(self._rx(msg))
         self.assertFalse(self.safety.get_controls_allowed())
 
     # counter
@@ -295,6 +298,8 @@ class TestHondaNidecSafetyBase(HondaBase):
 
   MAX_GAS = 198
 
+  BRAKE_SIG = "COMPUTER_BRAKE"
+
   def setUp(self):
     self.packer = CANPackerPanda("honda_civic_touring_2016_can_generated")
     self.safety = libsafety_py.libsafety
@@ -302,7 +307,7 @@ class TestHondaNidecSafetyBase(HondaBase):
     self.safety.init_tests()
 
   def _send_brake_msg(self, brake, aeb_req=0, bus=0):
-    values = {"COMPUTER_BRAKE": brake, "AEB_REQ_1": aeb_req}
+    values = {self.BRAKE_SIG: brake, "AEB_REQ_1": aeb_req}
     return self.packer.make_can_msg_panda("BRAKE_COMMAND", bus, values)
 
   def _rx_brake_msg(self, brake, aeb_req=0):
@@ -452,10 +457,10 @@ class TestHondaBoschAltBrakeSafetyBase(TestHondaBoschSafetyBase):
   def test_alt_brake_rx_hook(self):
     self.safety.set_honda_alt_brake_msg(1)
     self.safety.set_controls_allowed(1)
-    to_push = self._alt_brake_msg(0)
-    self.assertTrue(self._rx(to_push))
-    to_push[0].data[2] = to_push[0].data[2] & 0xF0  # invalidate checksum
-    self.assertFalse(self._rx(to_push))
+    msg = self._alt_brake_msg(0)
+    self.assertTrue(self._rx(msg))
+    msg[0].data[2] = msg[0].data[2] & 0xF0  # invalidate checksum
+    self.assertFalse(self._rx(msg))
     self.assertFalse(self.safety.get_controls_allowed())
 
   def test_alt_disengage_on_brake(self):
@@ -602,6 +607,55 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
   # Longitudinal doesn't need to send buttons
   def test_spam_cancel_safety_check(self):
     pass
+
+
+class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
+  """Base class for CANFD Honda Bosch"""
+  PT_BUS = 0
+  STEER_BUS = 0
+  BUTTONS_BUS = 0
+
+  TX_MSGS = [[0xE4, 0], [0x296, 0], [0x33D, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}
+
+  def setUp(self):
+    self.packer = CANPackerPanda("honda_common_canfd_generated")
+    self.safety = libsafety_py.libsafety
+
+
+class TestHondaBoschCANFDSafety(HondaPcmEnableBase, TestHondaBoschCANFDSafetyBase):
+  """
+    Covers the Honda Bosch CANFD safety mode with stock longitudinal
+  """
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD)
+    self.safety.init_tests()
+
+
+class TestHondaBoschCANFDAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschCANFDSafetyBase, TestHondaBoschAltBrakeSafetyBase):
+  """
+    Covers the Honda Bosch CANFD safety mode with stock longitudinal and an alternate brake message
+  """
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.ALT_BRAKE)
+    self.safety.init_tests()
+
+
+class TestHondaNidecClaritySafety(TestHondaNidecPcmSafety):
+
+  BRAKE_SIG = "COMPUTER_BRAKE_ALT"
+
+  def setUp(self):
+    self.packer = CANPackerPanda("honda_clarity_hybrid_2018_can_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_current_safety_param_sp(HondaSafetyFlagsSP.CLARITY)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, 0)
+    self.safety.init_tests()
 
 
 if __name__ == "__main__":
