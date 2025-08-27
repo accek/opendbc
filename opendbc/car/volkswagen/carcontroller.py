@@ -41,18 +41,18 @@ class CarController(CarControllerBase):
       # Simply forward messages if the car is faulted (e.g. Emergency Assist is active)
 
       # TODO(accek): adjust panda safety to allow this
-      self.forward_message(CS, self.CCS.MSG_STEERING, CANBUS.pt, can_sends)
+      self.forward_message(CS, self.CCS.MSG_STEERING, self.CAN.pt, can_sends)
       if self.CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT:
-        self.forward_message(CS, self.CCS.MSG_EPS, CANBUS.cam, can_sends)
+        self.forward_message(CS, self.CCS.MSG_EPS, self.CAN.cam, can_sends)
       if self.CP.openpilotLongitudinalControl:
-        self.forward_message(CS, self.CCS.MSG_ACC_1, CANBUS.pt, can_sends)
-        self.forward_message(CS, self.CCS.MSG_ACC_2, CANBUS.pt, can_sends)
-        self.forward_message(CS, self.CCS.MSG_TSK, CANBUS.cam, can_sends)
-        self.forward_message(CS, self.CCS.MSG_ACC_HUD_1, CANBUS.pt, can_sends)
-        self.forward_message(CS, self.CCS.MSG_ACC_HUD_2, CANBUS.pt, can_sends)
-        self.forward_message(CS, self.CCS.MSG_ACC_HUD_3, CANBUS.pt, can_sends)
-      self.forward_message(CS, self.CCS.MSG_LKA_HUD, CANBUS.pt, can_sends)
-      self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, CANBUS.cam, can_sends)
+        self.forward_message(CS, self.CCS.MSG_ACC_1, self.CAN.pt, can_sends)
+        self.forward_message(CS, self.CCS.MSG_ACC_2, self.CAN.pt, can_sends)
+        self.forward_message(CS, self.CCS.MSG_TSK, self.CAN.cam, can_sends)
+        self.forward_message(CS, self.CCS.MSG_ACC_HUD_1, self.CAN.pt, can_sends)
+        self.forward_message(CS, self.CCS.MSG_ACC_HUD_2, self.CAN.pt, can_sends)
+        self.forward_message(CS, self.CCS.MSG_ACC_HUD_3, self.CAN.pt, can_sends)
+      self.forward_message(CS, self.CCS.MSG_LKA_HUD, self.CAN.pt, can_sends)
+      self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, self.CAN.cam, can_sends)
 
       new_actuators = actuators.as_builder()
       new_actuators.steer = 0
@@ -156,9 +156,9 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if CC_AC.stockAccOverrideArmed or CS.out_ac.stockAccOverride:
-        self.forward_message(CS, self.CCS.MSG_ACC_HUD_1, CANBUS.pt, can_sends)
-        self.forward_message(CS, self.CCS.MSG_ACC_HUD_2, CANBUS.pt, can_sends)
-        self.forward_message(CS, self.CCS.MSG_ACC_HUD_3, CANBUS.pt, can_sends)
+        self.forward_message(CS, self.CCS.MSG_ACC_HUD_1, self.CAN.pt, can_sends)
+        self.forward_message(CS, self.CCS.MSG_ACC_HUD_2, self.CAN.pt, can_sends)
+        self.forward_message(CS, self.CCS.MSG_ACC_HUD_3, self.CAN.pt, can_sends)
       elif self.can_forward_message(CS, self.CCS.MSG_ACC_HUD_1) or \
           self.can_forward_message(CS, self.CCS.MSG_ACC_HUD_2) or \
           self.can_forward_message(CS, self.CCS.MSG_ACC_HUD_3):
@@ -179,7 +179,7 @@ class CarController(CarControllerBase):
     # **** Stock ACC Button Controls **************************************** #
 
     if self.CP.pcmCruise and (CC.cruiseControl.cancel or CC.cruiseControl.resume):
-      self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, CANBUS.cam, can_sends, self.CCS.create_acc_buttons_control,
+      self.forward_message(CS, self.CCS.MSG_ACC_BUTTONS, self.CAN.cam, can_sends, self.CCS.create_acc_buttons_control,
                            cancel=CC.cruiseControl.cancel, resume=CC.cruiseControl.resume)
     elif self.CP.openpilotLongitudinalControl:
       set_speed_ms = hud_control.setSpeed
