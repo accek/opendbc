@@ -8,10 +8,11 @@ from opendbc.car.common.basedir import BASEDIR
 
 # TODO: remove car from cereal/__init__.py and always import from opendbc
 try:
-  from cereal import car
+  from cereal import car, car_custom
 except ImportError:
   capnp.remove_import_hook()
   car = capnp.load(os.path.join(BASEDIR, "car.capnp"))
+  car_custom = capnp.load(os.path.join(BASEDIR, "car_custom.capnp"))
 
 CarState = car.CarState
 RadarData = car.RadarData
@@ -170,3 +171,14 @@ class CarControlSP:
 @auto_dataclass
 class CarStateSP:
   speedLimit: float = auto_field()
+
+
+# acspilot structs
+
+CarParamsAC = car_custom.CarParamsAC
+CarStateAC = car_custom.CarStateAC
+CarControlAC = car_custom.CarControlAC
+
+CarParamsACT = capnp.lib.capnp._StructModule
+CarStateACT = capnp.lib.capnp._StructModule
+CarControlACT = capnp.lib.capnp._StructModule
