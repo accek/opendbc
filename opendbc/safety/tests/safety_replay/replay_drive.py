@@ -112,8 +112,8 @@ def replay_drive(msgs, safety_mode, param, alternative_experience, param_sp):
     elif msg.which() == 'can':
       # ignore msgs we sent
       for canmsg in filter(lambda m: m.src < 128, msg.can):
-        safety.safety_fwd_hook(canmsg.src, canmsg.address)
         _msg = package_can_msg(canmsg)
+        safety.safety_fwd_hook(_msg)
         recv = safety.safety_rx_hook(_msg)
         if not recv:
           rx_invalid += 1

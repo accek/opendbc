@@ -288,12 +288,12 @@ class TestTeslaSafetyBase(common.CarSafetyTest, common.AngleSteeringSafetyTest, 
 
     # stock system sends no LKAS -> no forwarding, and OP is allowed to TX
     self.assertEqual(1, self._rx(no_lkas_msg_cam))
-    self.assertEqual(-1, self.safety.safety_fwd_hook(2, no_lkas_msg_cam.addr))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(no_lkas_msg_cam))
     self.assertTrue(self._tx(no_lkas_msg))
 
     # stock system sends LKAS -> forwarding, and OP is not allowed to TX
     self.assertEqual(1, self._rx(lkas_msg_cam))
-    self.assertEqual(0, self.safety.safety_fwd_hook(2, lkas_msg_cam.addr))
+    self.assertEqual(0, self.safety.safety_fwd_hook(lkas_msg_cam))
     self.assertFalse(self._tx(no_lkas_msg))
 
   def test_angle_cmd_when_enabled(self):
@@ -394,12 +394,12 @@ class TestTeslaStockSafety(TestTeslaSafetyBase):
 
     # stock system sends no AEB -> no forwarding, and OP is allowed to TX
     self.assertEqual(1, self._rx(no_aeb_msg_cam))
-    self.assertEqual(0, self.safety.safety_fwd_hook(2, no_aeb_msg_cam.addr))
+    self.assertEqual(0, self.safety.safety_fwd_hook(no_aeb_msg_cam))
     self.assertTrue(self._tx(no_aeb_msg))
 
     # stock system sends AEB -> forwarding, and OP is not allowed to TX
     self.assertEqual(1, self._rx(aeb_msg_cam))
-    self.assertEqual(0, self.safety.safety_fwd_hook(2, aeb_msg_cam.addr))
+    self.assertEqual(0, self.safety.safety_fwd_hook(aeb_msg_cam))
     self.assertFalse(self._tx(no_aeb_msg))
 
 
@@ -424,12 +424,12 @@ class TestTeslaLongitudinalSafety(TestTeslaSafetyBase):
 
     # stock system sends no AEB -> no forwarding, and OP is allowed to TX
     self.assertEqual(1, self._rx(no_aeb_msg_cam))
-    self.assertEqual(-1, self.safety.safety_fwd_hook(2, no_aeb_msg_cam.addr))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(no_aeb_msg_cam))
     self.assertTrue(self._tx(no_aeb_msg))
 
     # stock system sends AEB -> forwarding, and OP is not allowed to TX
     self.assertEqual(1, self._rx(aeb_msg_cam))
-    self.assertEqual(0, self.safety.safety_fwd_hook(2, aeb_msg_cam.addr))
+    self.assertEqual(0, self.safety.safety_fwd_hook(aeb_msg_cam))
     self.assertFalse(self._tx(no_aeb_msg))
 
   def test_prevent_reverse(self):

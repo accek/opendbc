@@ -332,7 +332,9 @@ static bool tesla_tx_hook(const CANPacket_t *msg) {
   return tx;
 }
 
-static bool tesla_fwd_hook(int bus_num, int addr) {
+static bool tesla_fwd_hook(const CANPacket_t *msg) {
+  int bus_num = msg->bus;
+  int addr = msg->addr;
   bool block_msg = false;
 
   if (bus_num == 2) {
