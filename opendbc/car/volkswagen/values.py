@@ -67,8 +67,22 @@ class CarControllerParams:
   ACCEL_MAX = 2.0                          # 2.0 m/s max acceleration
   ACCEL_MIN = -3.5                         # 3.5 m/s max deceleration
 
+  STOP_ACCEL = -3.0                        # 3.0 m/s deceleration for stopping, as stock
+
+  STOCK_ACC_SET_SPEED_STEP = 10.0 * CV.KPH_TO_MS  # 10 km/h speed step for stock ACC set speed buttons
+
+  # TODO: adjust to match actual limits which depend on ACC version
+  STOCK_ACC_MIN_SET_SPEED = 30.0 * CV.KPH_TO_MS
+  STOCK_ACC_MAX_SET_SPEED = 250.0 * CV.KPH_TO_MS
+
+  STOP_DISTANCE = 2.0
+
   def __init__(self, CP):
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
+
+    # acspilot: defaults overridden per-branch below (MLB keeps upstream's single gapAdjustCruise)
+    self.BTN_STEP = 3
+    self.BUTTONS_AC: list[Button] = []
 
     if CP.flags & VolkswagenFlags.PQ:
       self.LDW_STEP = 5                   # LDW_1 message frequency 20Hz
@@ -76,6 +90,7 @@ class CarControllerParams:
       self.STEER_DRIVER_ALLOWANCE = 80    # Driver intervention threshold 0.8 Nm
       self.STEER_DELTA_UP = 6             # Max HCA reached in 1.00s (STEER_MAX / (50Hz * 1.00))
       self.STEER_DELTA_DOWN = 10          # Min HCA reached in 0.60s (STEER_MAX / (50Hz * 0.60))
+      self.BTN_STEP = 2
 
       if CP.transmissionType == TransmissionType.automatic:
         self.shifter_values = can_define.dv["Getriebe_1"]["GE1_Wahl_Pos"]
@@ -87,7 +102,12 @@ class CarControllerParams:
         Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_Neu", "GRA_Up_kurz", [1]),
         Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_Neu", "GRA_Down_kurz", [1]),
         Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_Neu", "GRA_Abbrechen", [1]),
-        Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_Neu", "GRA_Zeitluecke", [3]),
+      ]
+
+      # acspilot: separate gap up/down controls in the custom CarStateAC struct
+      self.BUTTONS_AC = [
+        Button(structs.CarStateAC.ButtonEvent.Type.gapAdjustCruiseUp, "GRA_Neu", "GRA_Zeitluecke", [1]),
+        Button(structs.CarStateAC.ButtonEvent.Type.gapAdjustCruiseDown, "GRA_Neu", "GRA_Zeitluecke", [2]),
       ]
 
       self.LDW_MESSAGES = {
@@ -137,7 +157,12 @@ class CarControllerParams:
           Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_ACC_01", "GRA_Tip_Hoch", [1]),
           Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_ACC_01", "GRA_Tip_Runter", [1]),
           Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_ACC_01", "GRA_Abbrechen", [1]),
-          Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [1]),
+        ]
+
+        # acspilot: separate gap up/down controls in the custom CarStateAC struct
+        self.BUTTONS_AC = [
+          Button(structs.CarStateAC.ButtonEvent.Type.gapAdjustCruiseUp, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [1]),
+          Button(structs.CarStateAC.ButtonEvent.Type.gapAdjustCruiseDown, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [2]),
         ]
 
       self.LDW_MESSAGES = {

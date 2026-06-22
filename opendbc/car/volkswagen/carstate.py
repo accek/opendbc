@@ -15,10 +15,15 @@ class CarState(CarStateBase):
     self.eps_init_complete = False
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
+    self.button_states_ac = {button.event_type: False for button in self.CCP.BUTTONS_AC}
     self.esp_hold_confirmation = False
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
     self.acc_type = 0
+
+    # acspilot: raw stock message values forwarded by the carcontroller (stock-ACC override)
+    self.stock_values: dict = {}
+    self.stock_acc_set_speed: float | None = None
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
@@ -28,17 +33,19 @@ class CarState(CarStateBase):
           return True
     return False
 
-  def create_button_events(self, pt_cp, buttons):
+  def create_button_events(self, pt_cp, buttons, button_states=None, event_class=structs.CarState.ButtonEvent):
+    if button_states is None:
+      button_states = self.button_states
     button_events = []
 
     for button in buttons:
       state = pt_cp.vl[button.can_addr][button.can_msg] in button.values
-      if self.button_states[button.event_type] != state:
-        event = structs.CarState.ButtonEvent()
+      if button_states[button.event_type] != state:
+        event = event_class()
         event.type = button.event_type
         event.pressed = state
         button_events.append(event)
-      self.button_states[button.event_type] = state
+      button_states[button.event_type] = state
 
     return button_events
 
@@ -140,6 +147,46 @@ class CarState(CarStateBase):
 
     self.frame += 1
     return ret, ret_sp
+
+  def update_ac(self, can_parsers) -> structs.CarStateAC:
+    # acspilot: custom CarStateAC layer (MQB only; PQ/MLB not supported yet)
+    if self.CP.flags & VolkswagenFlags.PQ or self.CP.flags & VolkswagenFlags.MLB:
+      return super().update_ac(can_parsers)
+
+    pt_cp = can_parsers[Bus.pt]
+    cam_cp = can_parsers[Bus.cam]
+    ext_cp = pt_cp if self.CP.networkLocation == NetworkLocation.fwdCamera else cam_cp
+
+    ret_ac = structs.CarStateAC()
+
+    ret_ac.accFaultedTemporary = pt_cp.vl["TSK_06"]["TSK_Status"] == 6 or \
+                                 ext_cp.vl["ACC_06"]["ACC_Status_ACC"] == 6
+    ret_ac.screenBrightness = pt_cp.vl["Dimmung_01"]["DI_KL_58xd"] / 100.0
+    ret_ac.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS_AC, self.button_states_ac,
+                                                    event_class=structs.CarStateAC.ButtonEvent)
+
+    # Stock messages forwarded by the carcontroller while the stock ACC is in control
+    self.update_stock_values("LH_EPS_03", pt_cp)
+    self.update_stock_values("GRA_ACC_01", pt_cp)
+    if self.CP.networkLocation == NetworkLocation.fwdCamera:
+      self.update_stock_values("LDW_02", cam_cp)
+
+    if self.CP.openpilotLongitudinalControl:
+      self.update_stock_values("ACC_02", ext_cp)
+      self.update_stock_values("ACC_04", ext_cp)
+      self.update_stock_values("ACC_06", ext_cp)
+      self.update_stock_values("ACC_07", ext_cp)
+      self.update_stock_values("ACC_13", ext_cp)
+      self.update_stock_values("TSK_06", pt_cp)
+      stock_acc_status = ext_cp.vl["ACC_06"]["ACC_Status_ACC"]
+      stock_acc_desired_accel = ext_cp.vl["ACC_06"]["ACC_Sollbeschleunigung_02"]
+      ret_ac.stockAccOverride = (stock_acc_status in (3, 4) and stock_acc_desired_accel < 3.005) or stock_acc_status in (5, 6, 7)
+      self.stock_acc_set_speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS
+
+    return ret_ac
+
+  def update_stock_values(self, msg_name, cp):
+    self.stock_values[msg_name] = cp.vl[msg_name]
 
   def update_pq(self, pt_cp, cam_cp, ext_cp) -> tuple[structs.CarState, structs.CarStateSP]:
     ret = structs.CarState()
