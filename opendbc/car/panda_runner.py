@@ -40,7 +40,7 @@ class PandaRunner(AbstractContextManager):
     return [[CanData(addr, dat, bus) for addr, dat, bus in recv], ]
 
   def read(self, strict: bool = True):
-    cs = self.CI.update([int(time.monotonic()*1e9), self._can_recv()[0]])
+    cs, _, _ = self.CI.update([int(time.monotonic()*1e9), self._can_recv()[0]])
     if strict:
       assert cs.canValid, "CAN went invalid, check connections"
     return cs
