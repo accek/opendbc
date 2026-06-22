@@ -94,6 +94,12 @@ class TestVolkswagenMqbSafetyBase(common.CarSafetyTest, common.DriverTorqueSteer
     values = {"ACC_Sollbeschleunigung_02": accel, "COUNTER": cnt}
     return self.packer.make_can_msg_safety("ACC_06", 0, values)
 
+  # acspilot: stock ACC_06 forwarded from the camera/radar bus, with the engagement status field the
+  # fwd hook reads to decide whether the stock ACC is in control (ACC_Status_ACC) plus the accel request
+  def _acc_06_status_msg(self, status, accel=0.0, cnt=0, bus=2):
+    values = {"ACC_Status_ACC": status, "ACC_Sollbeschleunigung_02": accel, "COUNTER": cnt}
+    return self.packer.make_can_msg_safety("ACC_06", bus, values)
+
   # Acceleration request to drivetrain coordinator
   def _acc_07_msg(self, accel, secondary_accel=3.02, cnt=0):
     values = {"ACC_Sollbeschleunigung_02": accel, "ACC_Folgebeschl": secondary_accel, "COUNTER": cnt}
@@ -282,6 +288,35 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
     for addr in (MSG_HCA_01, MSG_LDW_02, MSG_ACC_06):
       self.assertEqual(-1, self.safety.safety_fwd_hook(make_msg(2, addr, 8)), hex(addr))
     self.assertEqual(-1, self.safety.safety_fwd_hook(make_msg(0, MSG_LH_EPS_03, 8)))
+
+  # acspilot: the fwd hook reads forwarded ACC_06 to know whether the stock ACC is engaged. While it is,
+  # the stock ACC accel/HUD messages must keep flowing to the car; once it is not, openpilot takes over
+  # and those messages are blocked. These cover the ACC_Status_ACC parsing that gates that decision.
+  STOCK_ACC_MSGS = (MSG_ACC_02, MSG_ACC_04, MSG_ACC_07, MSG_ACC_13)
+
+  def test_stock_acc_engaged_forwards_acc_messages(self):
+    self._tx(self._torque_cmd_msg(0))  # mark tx attempted so the fwd hook begins gating
+    # status 5 (also 6, 7) means stock ACC is active regardless of the accel request
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5)))
+    for addr in self.STOCK_ACC_MSGS:
+      self.assertEqual(0, self.safety.safety_fwd_hook(make_msg(2, addr, 8)), hex(addr))
+
+  def test_stock_acc_not_engaged_blocks_acc_messages(self):
+    self._tx(self._torque_cmd_msg(0))
+    # status 2 is not an engaged state -> openpilot controls longitudinal, stock ACC messages blocked
+    self.assertEqual(-1, self.safety.safety_fwd_hook(self._acc_06_status_msg(2)))
+    for addr in self.STOCK_ACC_MSGS:
+      self.assertEqual(-1, self.safety.safety_fwd_hook(make_msg(2, addr, 8)), hex(addr))
+
+  def test_stock_acc_status3_engaged_only_below_inactive_accel(self):
+    # status 3/4 only counts as engaged while the stock accel request is below the inactive sentinel
+    self._tx(self._torque_cmd_msg(0))
+    # accel well below inactive -> engaged -> ACC_02 forwarded
+    self.safety.safety_fwd_hook(self._acc_06_status_msg(3, accel=0.0, cnt=0))
+    self.assertEqual(0, self.safety.safety_fwd_hook(make_msg(2, MSG_ACC_02, 8)))
+    # accel at the inactive sentinel -> not engaged -> ACC_02 blocked
+    self.safety.safety_fwd_hook(self._acc_06_status_msg(3, accel=self.INACTIVE_ACCEL, cnt=1))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(make_msg(2, MSG_ACC_02, 8)))
 
 
 if __name__ == "__main__":
