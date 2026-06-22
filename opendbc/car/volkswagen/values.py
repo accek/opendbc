@@ -59,7 +59,10 @@ class CarControllerParams:
   STEER_MAX = 300                          # Max heading control assist torque 3.00 Nm
   STEER_DRIVER_MULTIPLIER = 3              # weight driver torque heavily
   STEER_DRIVER_FACTOR = 1                  # from dbc
+  STEER_DRIVER_EA_SIMULATED = 60           # acspilot: simulated steering inputs to pacify Emergency Assist, 0.6 Nm
 
+  STEER_TIME_MAX = 360                     # acspilot: max time EPS allows uninterrupted HCA steering control
+  STEER_TIME_ALERT = STEER_TIME_MAX - 10   # acspilot: if mitigation fails, soft disengage before EPS timer expires
   STEER_TIME_STUCK_TORQUE = 1.9            # EPS limits same torque to 6 seconds, reset timer 3x within that period
 
   DEFAULT_MIN_STEER_SPEED = 0.4            # m/s, newer EPS racks fault below this speed, don't show a low speed alert

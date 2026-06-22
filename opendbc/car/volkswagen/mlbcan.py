@@ -1,5 +1,4 @@
-from opendbc.car.volkswagen.mqbcan import (volkswagen_mqb_meb_checksum, xor_checksum,
-                                           create_lka_hud_control as mqb_create_lka_hud_control)
+from opendbc.car.volkswagen.mqbcan import volkswagen_mqb_meb_checksum, xor_checksum
 
 # TODO: Parameterize the hca control type (5 vs 7) and consolidate with MQB (and PQ?)
 def create_steering_control(packer, bus, apply_steer, lkas_enabled):
@@ -15,7 +14,24 @@ def create_steering_control(packer, bus, apply_steer, lkas_enabled):
 
 
 def create_lka_hud_control(packer, bus, ldw_stock_values, enabled, steering_pressed, hud_alert, hud_control):
-  return mqb_create_lka_hud_control(packer, bus, ldw_stock_values, enabled, steering_pressed, hud_alert, hud_control)
+  values = {}
+  if len(ldw_stock_values):
+    values = {s: ldw_stock_values[s] for s in [
+      "LDW_SW_Warnung_links",   # Blind spot in warning mode on left side due to lane departure
+      "LDW_SW_Warnung_rechts",  # Blind spot in warning mode on right side due to lane departure
+      "LDW_Seite_DLCTLC",       # Direction of most likely lane departure (left or right)
+      "LDW_DLC",                # Lane departure, distance to line crossing
+      "LDW_TLC",                # Lane departure, time to line crossing
+    ]}
+
+  values.update({
+    "LDW_Status_LED_gelb": 1 if enabled and steering_pressed else 0,
+    "LDW_Status_LED_gruen": 1 if enabled and not steering_pressed else 0,
+    "LDW_Lernmodus_links": 3 if hud_control.leftLaneDepart else 1 + hud_control.leftLaneVisible,
+    "LDW_Lernmodus_rechts": 3 if hud_control.rightLaneDepart else 1 + hud_control.rightLaneVisible,
+    "LDW_Texte": hud_alert,
+  })
+  return packer.make_can_msg("LDW_02", bus, values)
 
 
 def create_acc_buttons_control(packer, bus, gra_stock_values, cancel=False, resume=False):
