@@ -4,7 +4,7 @@ import numpy as np
 from opendbc.car.structs import CarParams
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
-from opendbc.safety.tests.common import CANPackerSafety
+from opendbc.safety.tests.common import CANPackerSafety, make_msg
 from opendbc.car.volkswagen.values import VolkswagenSafetyFlags
 
 MAX_ACCEL = 2.0
@@ -20,7 +20,12 @@ MSG_HCA_01 = 0x126      # TX by OP, Heading Control Assist steering torque
 MSG_GRA_ACC_01 = 0x12B  # TX by OP, ACC control buttons for cancel/resume
 MSG_ACC_07 = 0x12E      # TX by OP, ACC control instructions to the drivetrain coordinator
 MSG_ACC_02 = 0x30C      # TX by OP, ACC HUD data to the instrument cluster
+MSG_ACC_04 = 0x324      # acspilot: TX by OP, ACC HUD data to the instrument cluster
+MSG_ACC_13 = 0x2A7      # acspilot: TX by OP, ACC HUD data to the instrument cluster
 MSG_LDW_02 = 0x397      # TX by OP, Lane line recognition and text alerts
+
+# acspilot: the grace period that keeps accel valid briefly after long is disabled
+ACC_CHECKS_GRACE_PERIOD_US = 50000
 
 
 class TestVolkswagenMqbSafetyBase(common.CarSafetyTest, common.DriverTorqueSteeringSafetyTest):
@@ -85,14 +90,20 @@ class TestVolkswagenMqbSafetyBase(common.CarSafetyTest, common.DriverTorqueSteer
     return self.packer.make_can_msg_safety("GRA_ACC_01", bus, values)
 
   # Acceleration request to drivetrain coordinator
-  def _acc_06_msg(self, accel):
-    values = {"ACC_Sollbeschleunigung_02": accel}
+  def _acc_06_msg(self, accel, cnt=0):
+    values = {"ACC_Sollbeschleunigung_02": accel, "COUNTER": cnt}
     return self.packer.make_can_msg_safety("ACC_06", 0, values)
 
   # Acceleration request to drivetrain coordinator
-  def _acc_07_msg(self, accel, secondary_accel=3.02):
-    values = {"ACC_Sollbeschleunigung_02": accel, "ACC_Folgebeschl": secondary_accel}
+  def _acc_07_msg(self, accel, secondary_accel=3.02, cnt=0):
+    values = {"ACC_Sollbeschleunigung_02": accel, "ACC_Folgebeschl": secondary_accel, "COUNTER": cnt}
     return self.packer.make_can_msg_safety("ACC_07", 0, values)
+
+  # acspilot: the carcontroller forwards/replaces stock messages, so nothing is blocked from
+  # forwarding until openpilot has attempted to send its first message
+  def test_fwd_hook(self):
+    self._tx(self._torque_cmd_msg(0))
+    super().test_fwd_hook()
 
   # Verify brake_pressed is true if either the switch or pressure threshold signals are true
   def test_redundant_brake_signals(self):
@@ -138,19 +149,30 @@ class TestVolkswagenMqbStockSafety(TestVolkswagenMqbSafetyBase):
     self.safety.init_tests()
 
   def test_spam_cancel_safety_check(self):
+    # acspilot: cancel is only allowed when stock cruise was previously engaged
+    self._rx(self._tsk_status_msg(True))   # engage stock cruise -> cruise_engaged_prev
     self.safety.set_controls_allowed(0)
     self.assertTrue(self._tx(self._gra_acc_01_msg(cancel=1)))
     self.assertFalse(self._tx(self._gra_acc_01_msg(resume=1)))
     self.assertFalse(self._tx(self._gra_acc_01_msg(_set=1)))
+    # cancel is blocked once stock cruise has never been engaged
+    self._rx(self._tsk_status_msg(False, main_switch=False))
+    self.safety.set_controls_allowed(0)
+    self.assertFalse(self._tx(self._gra_acc_01_msg(cancel=1)))
     # do not block resume if we are engaged already
     self.safety.set_controls_allowed(1)
     self.assertTrue(self._tx(self._gra_acc_01_msg(resume=1)))
 
 
 class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
-  TX_MSGS = [[MSG_HCA_01, 0], [MSG_LDW_02, 0], [MSG_LH_EPS_03, 2], [MSG_ACC_02, 0], [MSG_ACC_06, 0], [MSG_ACC_07, 0]]
-  FWD_BLACKLISTED_ADDRS = {0: [MSG_LH_EPS_03], 2: [MSG_HCA_01, MSG_LDW_02, MSG_ACC_02, MSG_ACC_06, MSG_ACC_07]}
-  RELAY_MALFUNCTION_ADDRS = {0: (MSG_HCA_01, MSG_LDW_02, MSG_ACC_02, MSG_ACC_06, MSG_ACC_07), 2: (MSG_LH_EPS_03,)}
+  # acspilot: the MQB carcontroller forwards stock messages with modified fields, so it transmits and
+  # selectively blocks a wider set of messages than upstream. Forwarding is decided entirely by the
+  # custom fwd hook, so only HCA_01 participates in relay malfunction detection.
+  TX_MSGS = [[MSG_HCA_01, 0], [MSG_GRA_ACC_01, 2], [MSG_LDW_02, 0], [MSG_LH_EPS_03, 2], [MSG_TSK_06, 2],
+             [MSG_ACC_02, 0], [MSG_ACC_04, 0], [MSG_ACC_06, 0], [MSG_ACC_07, 0], [MSG_ACC_13, 0]]
+  FWD_BLACKLISTED_ADDRS = {0: [MSG_LH_EPS_03, MSG_TSK_06, MSG_GRA_ACC_01],
+                           2: [MSG_HCA_01, MSG_LDW_02, MSG_ACC_02, MSG_ACC_04, MSG_ACC_06, MSG_ACC_07, MSG_ACC_13]}
+  RELAY_MALFUNCTION_ADDRS = {0: (MSG_HCA_01,)}
   INACTIVE_ACCEL = 3.01
 
   def setUp(self):
@@ -197,6 +219,10 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
     self.assertFalse(self.safety.get_controls_allowed(), "controls allowed after ACC main switch off")
 
   def test_accel_safety_check(self):
+    # acspilot: ACC messages are gated by a counter-continuity check, so the counter must advance on
+    # every accepted tx. Push the timer past the grace period so the base accel limits are enforced.
+    self.safety.set_timer(ACC_CHECKS_GRACE_PERIOD_US + 1)
+    cnt_06 = cnt_07 = 0
     for controls_allowed in [True, False]:
       # enforce we don't skip over 0 or inactive accel
       for accel in np.concatenate((np.arange(MIN_ACCEL - 2, MAX_ACCEL + 2, 0.03), [0, self.INACTIVE_ACCEL])):
@@ -205,11 +231,57 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
         send = (controls_allowed and MIN_ACCEL <= accel <= MAX_ACCEL) or is_inactive_accel
         self.safety.set_controls_allowed(controls_allowed)
         # primary accel request used by ECU
-        self.assertEqual(send, self._tx(self._acc_06_msg(accel)), (controls_allowed, accel))
+        self.assertEqual(send, self._tx(self._acc_06_msg(accel, cnt_06)), (controls_allowed, accel))
+        if send:
+          cnt_06 = (cnt_06 + 1) % 16
         # additional accel request used by ABS/ESP
-        self.assertEqual(send, self._tx(self._acc_07_msg(accel)), (controls_allowed, accel))
-        # ensure the optional secondary accel field remains inactive for now
-        self.assertEqual(is_inactive_accel, self._tx(self._acc_07_msg(accel, secondary_accel=accel)), (controls_allowed, accel))
+        self.assertEqual(send, self._tx(self._acc_07_msg(accel, cnt=cnt_07)), (controls_allowed, accel))
+        if send:
+          cnt_07 = (cnt_07 + 1) % 16
+        # acspilot: the secondary accel field (ACC_Folgebeschl) is repurposed to feed lead acceleration
+        # and is no longer enforced inactive
+        self.assertEqual(send, self._tx(self._acc_07_msg(accel, secondary_accel=accel, cnt=cnt_07)), (controls_allowed, accel))
+        if send:
+          cnt_07 = (cnt_07 + 1) % 16
+
+  def test_acc_counter_check(self):
+    # acspilot: ACC messages must be sent with sequential counters so they never duplicate the
+    # forwarded stock messages when switching between stock and openpilot control
+    self.safety.set_timer(ACC_CHECKS_GRACE_PERIOD_US + 1)
+    self.safety.set_controls_allowed(True)
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=0)))
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=1)))
+    # out of sequence counter is rejected
+    self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=5)))
+    # resuming the sequence is accepted again
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=2)))
+
+  def test_accel_grace_period(self):
+    # acspilot: in-bounds accel stays valid within the grace period after controls are disabled, so a
+    # few dropped frames don't fault the stock ACC module
+    self.safety.set_timer(10 * ACC_CHECKS_GRACE_PERIOD_US)
+    # establish that long was allowed (refreshed in the rx hook while controls are allowed)
+    self.safety.set_controls_allowed(True)
+    self._rx(self._tsk_status_msg(False, main_switch=True))
+    self.safety.set_controls_allowed(False)
+    # still within the grace period: in-bounds accel allowed even though controls are not allowed
+    self.assertTrue(self._tx(self._acc_06_msg(MAX_ACCEL, cnt=0)))
+    # out-of-bounds accel is never allowed, even within the grace period
+    self.assertFalse(self._tx(self._acc_06_msg(MAX_ACCEL + 1.0, cnt=1)))
+    # after the grace period expires, in-bounds accel is rejected with controls not allowed
+    self.safety.set_timer(10 * ACC_CHECKS_GRACE_PERIOD_US + 2 * ACC_CHECKS_GRACE_PERIOD_US)
+    self.assertFalse(self._tx(self._acc_06_msg(MAX_ACCEL, cnt=1)))
+
+  def test_fwd_before_first_tx(self):
+    # acspilot: everything is forwarded until openpilot sends its first message
+    for addr in (MSG_HCA_01, MSG_LDW_02, MSG_ACC_06):
+      self.assertEqual(0, self.safety.safety_fwd_hook(make_msg(2, addr, 8)), hex(addr))
+    self.assertEqual(2, self.safety.safety_fwd_hook(make_msg(0, MSG_LH_EPS_03, 8)))
+    # after the first tx, stock messages openpilot replaces are blocked
+    self._tx(self._torque_cmd_msg(0))
+    for addr in (MSG_HCA_01, MSG_LDW_02, MSG_ACC_06):
+      self.assertEqual(-1, self.safety.safety_fwd_hook(make_msg(2, addr, 8)), hex(addr))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(make_msg(0, MSG_LH_EPS_03, 8)))
 
 
 if __name__ == "__main__":

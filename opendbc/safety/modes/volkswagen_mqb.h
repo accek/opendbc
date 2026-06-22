@@ -3,14 +3,82 @@
 #include "opendbc/safety/declarations.h"
 #include "opendbc/safety/modes/volkswagen_common.h"
 
+// longitudinal limits
+// acceleration in m/s2 * 1000 to avoid floating point math
+static const LongitudinalLimits VOLKSWAGEN_MQB_LONG_LIMITS = {
+  .max_accel = 2000,
+  .min_accel = -3500,
+  .inactive_accel = 3010,  // VW sends one increment above the max range when inactive
+};
+
+// acspilot: allow accel control for a short time after long is disabled. Rejecting even occasional
+// messages ultimately causes the stock ACC module to fault. The grace timer is refreshed while
+// controls_allowed (ignoring gas_pressed), which also keeps accel valid while the driver overrides
+// with the gas pedal (the TSK requires a valid accel input when gas is pressed).
+#define VOLKSWAGEN_MQB_ACC_CHECKS_GRACE_PERIOD_US 50000U  // 50ms
+
+typedef struct {
+  CanMsg msg;
+  int8_t last_counter;
+} MqbCounterCheck;
+
+// acspilot: counters of ACC messages are tracked across forwarded-stock and openpilot-injected
+// transmissions so that switching between the two never produces a duplicate counter (which would
+// fault the stock ACC module). The destination bus is used as the key.
+static MqbCounterCheck volkswagen_mqb_long_counter_checks[] = {
+  {.msg = {MSG_ACC_02, 0, 8}},
+  {.msg = {MSG_ACC_04, 0, 8}},
+  {.msg = {MSG_ACC_06, 0, 8}},
+  {.msg = {MSG_ACC_07, 0, 8}},
+  {.msg = {MSG_ACC_13, 0, 8}},
+  {.msg = {MSG_TSK_06, 2, 8}},
+  {.msg = {-1, 0, 0}},
+};
+
+static uint32_t volkswagen_mqb_long_allowed_last_ts = 0;
+static bool volkswagen_mqb_tx_attempted = false;
+
+static bool volkswagen_mqb_longitudinal_accel_checks(int desired_accel, const LongitudinalLimits limits) {
+  bool violation = longitudinal_accel_checks(desired_accel, limits);
+  // acspilot: within the grace period, still allow accel that stays inside the hard accel bounds
+  if (violation && (safety_get_ts_elapsed(microsecond_timer_get(), volkswagen_mqb_long_allowed_last_ts) < VOLKSWAGEN_MQB_ACC_CHECKS_GRACE_PERIOD_US)) {
+    violation = (desired_accel > limits.max_accel) || (desired_accel < limits.min_accel);
+  }
+  return violation;
+}
+
+static bool volkswagen_mqb_long_counter_check_and_update(const CANPacket_t *msg, uint8_t tx_bus) {
+  const int addr = msg->addr;
+  bool valid = true;
+  for (MqbCounterCheck* check = &volkswagen_mqb_long_counter_checks[0]; check->msg.addr != -1; check++) {
+    if ((check->msg.addr == addr) && (check->msg.bus == (unsigned int)tx_bus)) {
+      int counter = (int)volkswagen_mqb_meb_get_counter(msg);
+      if ((counter != ((check->last_counter + 1) % 16)) && (check->last_counter != -1)) {
+        valid = false;
+      } else {
+        check->last_counter = (int8_t)counter;
+      }
+    }
+  }
+  return valid;
+}
+
 static safety_config volkswagen_mqb_init(uint16_t param) {
   // Transmit of GRA_ACC_01 is allowed on bus 0 and 2 to keep compatibility with gateway and camera integration
   // MSG_LH_EPS_03: openpilot needs to replace apparent driver steering input torque to pacify VW Emergency Assist
-  static const CanMsg VOLKSWAGEN_MQB_STOCK_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_GRA_ACC_01, 0, 8, .check_relay = false}, {MSG_GRA_ACC_01, 2, 8, .check_relay = false},
-                                                        {MSG_LDW_02, 0, 8, .check_relay = true}, {MSG_LH_EPS_03, 2, 8, .check_relay = true}};
+  // acspilot: messages replaced by the custom fwd hook use disable_static_blocking so the fwd hook stays
+  // authoritative (it forwards everything until openpilot sends its first message, then blocks selectively).
+  static const CanMsg VOLKSWAGEN_MQB_STOCK_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true, .disable_static_blocking = true},
+                                                        {MSG_GRA_ACC_01, 0, 8, .check_relay = false}, {MSG_GRA_ACC_01, 2, 8, .check_relay = false},
+                                                        {MSG_LDW_02, 0, 8, .check_relay = true, .disable_static_blocking = true},
+                                                        {MSG_LH_EPS_03, 2, 8, .check_relay = true, .disable_static_blocking = true}};
 
-  static const CanMsg VOLKSWAGEN_MQB_LONG_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_LDW_02, 0, 8, .check_relay = true}, {MSG_LH_EPS_03, 2, 8, .check_relay = true},
-                                                       {MSG_ACC_02, 0, 8, .check_relay = true}, {MSG_ACC_06, 0, 8, .check_relay = true}, {MSG_ACC_07, 0, 8, .check_relay = true}};
+  static const CanMsg VOLKSWAGEN_MQB_LONG_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true, .disable_static_blocking = true},
+                                                       {MSG_GRA_ACC_01, 2, 8, .check_relay = false},
+                                                       {MSG_LDW_02, 0, 8, .check_relay = false}, {MSG_LH_EPS_03, 2, 8, .check_relay = false},
+                                                       {MSG_TSK_06, 2, 8, .check_relay = false}, {MSG_ACC_02, 0, 8, .check_relay = false},
+                                                       {MSG_ACC_04, 0, 8, .check_relay = false}, {MSG_ACC_06, 0, 8, .check_relay = false},
+                                                       {MSG_ACC_07, 0, 8, .check_relay = false}, {MSG_ACC_13, 0, 8, .check_relay = false}};
 
   static RxCheck volkswagen_mqb_rx_checks[] = {
     {.msg = {{MSG_ESP_19, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
@@ -20,9 +88,22 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
     {.msg = {{MSG_MOTOR_20, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_MOTOR_14, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_GRA_ACC_01, 0, 8, 33U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    // acspilot: stock ACC messages on the camera bus, used to track stock ACC override state
+    {.msg = {{MSG_ACC_02, 2, 8, 17U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_ACC_04, 2, 8, 17U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_ACC_06, 2, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_ACC_07, 2, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
   };
 
   volkswagen_common_init();
+
+  // acspilot longitudinal state
+  volkswagen_stock_acc_engaged = false;
+  volkswagen_mqb_long_allowed_last_ts = 0;
+  volkswagen_mqb_tx_attempted = false;
+  for (MqbCounterCheck* check = &volkswagen_mqb_long_counter_checks[0]; check->msg.addr != -1; check++) {
+    check->last_counter = -1;
+  }
 
 #ifdef ALLOW_DEBUG
   volkswagen_longitudinal = GET_FLAG(param, FLAG_VOLKSWAGEN_LONG_CONTROL);
@@ -108,6 +189,18 @@ static void volkswagen_mqb_rx_hook(const CANPacket_t *msg) {
     }
 
     brake_pressed = volkswagen_brake_pedal_switch || volkswagen_brake_pressure_detected;
+
+    // acspilot: track the last time longitudinal was allowed (with gas override) for the accel grace period
+    if (volkswagen_longitudinal) {
+      uint32_t now = microsecond_timer_get();
+      if (controls_allowed) {
+        volkswagen_mqb_long_allowed_last_ts = now;
+      } else if (safety_get_ts_elapsed(now, volkswagen_mqb_long_allowed_last_ts) > VOLKSWAGEN_MQB_ACC_CHECKS_GRACE_PERIOD_US) {
+        // Keep the elapsed time pinned just past the grace period to prevent timer wraparound from re-enabling it
+        volkswagen_mqb_long_allowed_last_ts = now - VOLKSWAGEN_MQB_ACC_CHECKS_GRACE_PERIOD_US - 1U;
+      } else {
+      }
+    }
   }
 }
 
@@ -123,15 +216,10 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *msg) {
     .type = TorqueDriverLimited,
   };
 
-  // longitudinal limits
-  // acceleration in m/s2 * 1000 to avoid floating point math
-  const LongitudinalLimits VOLKSWAGEN_MQB_LONG_LIMITS = {
-    .max_accel = 2000,
-    .min_accel = -3500,
-    .inactive_accel = 3010,  // VW sends one increment above the max range when inactive
-  };
-
   bool tx = true;
+
+  // acspilot: once openpilot has attempted any transmission, stop blindly forwarding stock messages
+  volkswagen_mqb_tx_attempted = true;
 
   // Safety check for HCA_01 Heading Control Assist torque
   if (msg->addr == MSG_HCA_01) {
@@ -153,14 +241,13 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *msg) {
       // Signal: ACC_06.ACC_Sollbeschleunigung_02 (acceleration in m/s2, scale 0.005, offset -7.22)
       desired_accel = ((((msg->data[4] & 0x7U) << 8) | msg->data[3]) * 5U) - 7220U;
     } else {
-      // Signal: ACC_07.ACC_Folgebeschl (acceleration in m/s2, scale 0.03, offset -4.6)
-      int secondary_accel = (msg->data[4] * 30U) - 4600U;
-      violation |= (secondary_accel != 3020);  // enforce always inactive (one increment above max range) at this time
+      // acspilot: ACC_07.ACC_Folgebeschl is repurposed to feed lead acceleration, so it is not
+      // enforced inactive (upstream forced it to one increment above max range)
       // Signal: ACC_07.ACC_Sollbeschleunigung_02 (acceleration in m/s2, scale 0.005, offset -7.22)
       desired_accel = (((msg->data[7] << 3) | ((msg->data[6] & 0xE0U) >> 5)) * 5U) - 7220U;
     }
 
-    violation |= longitudinal_accel_checks(desired_accel, VOLKSWAGEN_MQB_LONG_LIMITS);
+    violation |= volkswagen_mqb_longitudinal_accel_checks(desired_accel, VOLKSWAGEN_MQB_LONG_LIMITS);
 
     if (violation) {
       tx = false;
@@ -168,21 +255,89 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *msg) {
   }
 
   // FORCE CANCEL: ensuring that only the cancel button press is sent when controls are off.
-  // This avoids unintended engagements while still allowing resume spam
+  // This avoids unintended engagements while still allowing resume spam.
+  // acspilot: with openpilot longitudinal, the carcontroller injects stock ACC buttons (set/resume/
+  // accel/decel) to drive the stock ACC during a stock-ACC override, so those are allowed.
   if ((msg->addr == MSG_GRA_ACC_01) && !controls_allowed) {
-    // disallow resume and set: bits 16 and 19
-    if ((msg->data[2] & 0x9U) != 0U) {
+    bool is_set_cruise = GET_BIT(msg, 16U);
+    bool is_resume_cruise = GET_BIT(msg, 19U);
+    bool is_accel_cruise = GET_BIT(msg, 17U);
+    bool is_decel_cruise = GET_BIT(msg, 18U);
+    bool is_cancel = GET_BIT(msg, 13U);
+    bool allowed = volkswagen_longitudinal || (is_cancel && cruise_engaged_prev) ||
+                   ((is_set_cruise || is_resume_cruise || is_accel_cruise || is_decel_cruise) && controls_allowed);
+    if (!allowed) {
       tx = false;
     }
   }
 
+  // acspilot: do not allow injecting ACC messages out of counter sequence with the forwarded stock ones
+  if (volkswagen_longitudinal && tx) {
+    tx = volkswagen_mqb_long_counter_check_and_update(msg, msg->bus);
+  }
+
   return tx;
+}
+
+static bool volkswagen_mqb_fwd_hook(const CANPacket_t *msg) {
+  bool block_msg = false;
+
+  // If we didn't attempt any tx yet, just forward everything until we send the first message.
+  if (volkswagen_mqb_tx_attempted) {
+    switch (msg->bus) {
+      case 0U:
+        if (msg->addr == MSG_LH_EPS_03) {
+          // openpilot needs to replace apparent driver steering input torque to pacify VW Emergency Assist
+          block_msg = true;
+        } else if (volkswagen_longitudinal && !volkswagen_stock_acc_engaged && (msg->addr == MSG_TSK_06)) {
+          // openpilot needs to replace ACC feedback from TSK so that stock ACC would not fault
+          block_msg = true;
+        } else if (volkswagen_longitudinal && (msg->addr == MSG_GRA_ACC_01)) {
+          // openpilot needs to replace ACC control input to ensure that the stock ACC is never active, yet monitoring
+          block_msg = true;
+        } else {
+        }
+        break;
+      case 2U:
+        if (volkswagen_longitudinal && (msg->addr == MSG_ACC_06)) {
+          int acc_status = (msg->data[7] & 0x70U) >> 4;
+          int desired_accel = ((((msg->data[4] & 0x7U) << 8) | msg->data[3]) * 5U) - 7220U;
+          volkswagen_stock_acc_engaged =
+              (((acc_status == 3) || (acc_status == 4)) && (desired_accel < VOLKSWAGEN_MQB_LONG_LIMITS.inactive_accel)) ||
+              (acc_status == 5) || (acc_status == 6) || (acc_status == 7);
+        }
+        if ((msg->addr == MSG_HCA_01) || (msg->addr == MSG_LDW_02)) {
+          // openpilot takes over LKAS steering control and related HUD messages from the camera
+          block_msg = true;
+        } else if (volkswagen_longitudinal && !volkswagen_stock_acc_engaged
+            && ((msg->addr == MSG_ACC_02) || (msg->addr == MSG_ACC_04) || (msg->addr == MSG_ACC_06) || (msg->addr == MSG_ACC_07) || (msg->addr == MSG_ACC_13))) {
+          // openpilot takes over acceleration/braking control and related HUD messages from the stock ACC radar
+          block_msg = true;
+        } else {
+        }
+        break;
+      default:
+        block_msg = true;
+        break;
+    }
+  }
+
+  // This is mostly to update counters to avoid duplicate messages when switching from stock to OP.
+  // The check should never fail.
+  if (volkswagen_longitudinal && !block_msg) {
+    if (!volkswagen_mqb_long_counter_check_and_update(msg, (msg->bus == 0U) ? 2U : 0U)) {
+      block_msg = true;
+    }
+  }
+
+  return block_msg;
 }
 
 const safety_hooks volkswagen_mqb_hooks = {
   .init = volkswagen_mqb_init,
   .rx = volkswagen_mqb_rx_hook,
   .tx = volkswagen_mqb_tx_hook,
+  .fwd = volkswagen_mqb_fwd_hook,
   .get_counter = volkswagen_mqb_meb_get_counter,
   .get_checksum = volkswagen_mqb_meb_get_checksum,
   .compute_checksum = volkswagen_mqb_meb_compute_crc,
