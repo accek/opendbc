@@ -13,8 +13,8 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class CarState(CarStateBase, CarStateExt):
-  def __init__(self, CP, CP_SP):
-    CarStateBase.__init__(self, CP, CP_SP)
+  def __init__(self, CP, CP_SP, CP_AC):
+    CarStateBase.__init__(self, CP, CP_SP, CP_AC)
     CarStateExt.__init__(self, CP, CP_SP)
     self.can_define = CANDefine(DBC[CP.carFingerprint][Bus.party])
     self.shifter_values = self.can_define.dv["DI_systemStatus"]["DI_gear"]
@@ -147,7 +147,7 @@ class CarState(CarStateBase, CarStateExt):
     return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     return {
       Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.party),
       Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party),

@@ -4,7 +4,7 @@ from contextlib import AbstractContextManager
 from panda import Panda
 from opendbc.car.car_helpers import get_car
 from opendbc.car.can_definitions import CanData
-from opendbc.car.structs import CarParams, CarControl
+from opendbc.car.structs import CarParams, CarControl, CarControlSP, CarControlAC
 
 
 class PandaRunner(AbstractContextManager):
@@ -19,7 +19,7 @@ class PandaRunner(AbstractContextManager):
 
     safety_model = self.CI.CP.safetyConfigs[0].safetyModel
     self.p.set_safety_mode(CarParams.SafetyModel.elm327, 1)
-    self.CI.init(self.CI.CP, self._can_recv, self.p.can_send_many)
+    self.CI.init(self.CI.CP, self.CI.CP_SP, self.CI.CP_AC, self._can_recv, self.p.can_send_many)
     self.p.set_safety_mode(safety_model, self.CI.CP.safetyConfigs[0].safetyParam)
 
     return self
@@ -49,7 +49,7 @@ class PandaRunner(AbstractContextManager):
     if cc.enabled and not self.p.health()['controls_allowed']:
       # prevent the car from faulting. print a warning?
       cc = CarControl(enabled=False)
-    _, can_sends = self.CI.apply(cc)
+    _, can_sends = self.CI.apply(cc, CarControlSP(), CarControlAC())
     self.p.can_send_many(can_sends, timeout=25)
     self.p.send_heartbeat()
 

@@ -27,8 +27,8 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
 
 
 class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
-  def __init__(self, CP, CP_SP):
-    CarStateBase.__init__(self, CP, CP_SP)
+  def __init__(self, CP, CP_SP, CP_AC):
+    CarStateBase.__init__(self, CP, CP_SP, CP_AC)
     EsccCarStateBase.__init__(self)
     MadsCarState.__init__(self, CP, CP_SP)
     CarStateExt.__init__(self, CP, CP_SP)
@@ -330,7 +330,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).CAM),
     }
 
-  def get_can_parsers(self, CP, CP_SP):
+  def get_can_parsers(self, CP, CP_SP, CP_AC):
     if CP.flags & HyundaiFlags.CANFD:
       return self.get_can_parsers_canfd(CP)
 

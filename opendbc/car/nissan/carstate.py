@@ -13,8 +13,8 @@ TORQUE_SAMPLES = 12
 
 
 class CarState(CarStateBase, CarStateExt):
-  def __init__(self, CP, CP_SP):
-    CarStateBase.__init__(self, CP, CP_SP)
+  def __init__(self, CP, CP_SP, CP_AC):
+    CarStateBase.__init__(self, CP, CP_SP, CP_AC)
     CarStateExt.__init__(self, CP, CP_SP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 
@@ -139,7 +139,7 @@ class CarState(CarStateBase, CarStateExt):
     return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 1 if CP.carFingerprint == CAR.NISSAN_ALTIMA else 0),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 0 if CP.carFingerprint == CAR.NISSAN_ALTIMA else 1),

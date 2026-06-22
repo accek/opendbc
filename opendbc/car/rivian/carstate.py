@@ -10,8 +10,8 @@ GearShifter = structs.CarState.GearShifter
 
 
 class CarState(CarStateBase, CarStateExt):
-  def __init__(self, CP, CP_SP):
-    CarStateBase.__init__(self, CP, CP_SP)
+  def __init__(self, CP, CP_SP, CP_AC):
+    CarStateBase.__init__(self, CP, CP_SP, CP_AC)
     CarStateExt.__init__(self, CP, CP_SP)
     self.last_speed = 30
 
@@ -105,7 +105,7 @@ class CarState(CarStateBase, CarStateExt):
     return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 0),
       Bus.adas: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 1),

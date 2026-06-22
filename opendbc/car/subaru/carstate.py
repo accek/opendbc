@@ -11,8 +11,8 @@ from opendbc.sunnypilot.car.subaru.stop_and_go import SnGCarState
 
 
 class CarState(CarStateBase, MadsCarState, SnGCarState):
-  def __init__(self, CP, CP_SP):
-    CarStateBase.__init__(self, CP, CP_SP)
+  def __init__(self, CP, CP_SP, CP_AC):
+    CarStateBase.__init__(self, CP, CP_SP, CP_AC)
     MadsCarState.__init__(self, CP, CP_SP)
     SnGCarState.__init__(self, CP, CP_SP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
@@ -149,7 +149,7 @@ class CarState(CarStateBase, MadsCarState, SnGCarState):
     return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus.main),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus.camera),

@@ -16,7 +16,7 @@ class CarInterface(CarInterfaceBase):
   DRIVABLE_GEARS = (structs.CarState.GearShifter.low,)
 
   @staticmethod
-  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
+  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, prefer_torque_tune, docs) -> structs.CarParams:
     ret.brand = "chrysler"
 
     # TODO: Chrysler CUSW in dashcam pending comma safety validation and a fix for LKAS fault on disengage

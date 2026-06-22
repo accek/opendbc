@@ -12,7 +12,7 @@ class CarInterface(CarInterfaceBase):
   DRIVABLE_GEARS = (structs.CarState.GearShifter.brake,)
 
   @staticmethod
-  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
+  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, prefer_torque_tune, docs) -> structs.CarParams:
     ret.brand = "nissan"
     ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.nissan)]
     ret.autoResumeSng = False

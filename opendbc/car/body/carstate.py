@@ -32,5 +32,5 @@ class CarState(CarStateBase):
     return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     return {Bus.main: CANParser(DBC[CP.carFingerprint][Bus.main], [], 0)}

@@ -15,8 +15,8 @@ MAX_STEER_RATE_FRAMES = 7  # tx control frames needed before torque can be cut
 
 
 class CarController(CarControllerBase, SnGCarController):
-  def __init__(self, dbc_names, CP, CP_SP):
-    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
+  def __init__(self, dbc_names, CP, CP_SP, CP_AC):
+    CarControllerBase.__init__(self, dbc_names, CP, CP_SP, CP_AC)
     SnGCarController.__init__(self, CP, CP_SP)
     self.apply_torque_last = 0
 
@@ -26,7 +26,7 @@ class CarController(CarControllerBase, SnGCarController):
     self.p = CarControllerParams(CP)
     self.packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
 
-  def update(self, CC, CC_SP, CS, now_nanos):
+  def update(self, CC, CC_SP, CC_AC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
     pcm_cancel_cmd = CC.cruiseControl.cancel

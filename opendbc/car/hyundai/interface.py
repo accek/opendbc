@@ -27,7 +27,7 @@ class CarInterface(CarInterfaceBase):
   DRIVABLE_GEARS = (structs.CarState.GearShifter.sport, structs.CarState.GearShifter.manumatic)
 
   @staticmethod
-  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
+  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, prefer_torque_tune, docs) -> structs.CarParams:
     ret.brand = "hyundai"
 
     if ret.flags & HyundaiFlags.CANFD:
@@ -227,7 +227,7 @@ class CarInterface(CarInterfaceBase):
     return ret
 
   @staticmethod
-  def init(CP, CP_SP, can_recv, can_send, communication_control=None):
+  def init(CP, CP_SP, CP_AC, can_recv, can_send, communication_control=None):
     # 0x80 silences response
     if communication_control is None:
       communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX, uds.MESSAGE_TYPE.NORMAL])

@@ -24,7 +24,7 @@ class CarInterface(CarInterfaceBase):
     return CarControllerParams(CP).ACCEL_MIN, CarControllerParams(CP).ACCEL_MAX
 
   @staticmethod
-  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
+  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, prefer_torque_tune, docs) -> structs.CarParams:
     ret.brand = "toyota"
     ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.toyota)]
     ret.safetyConfigs[0].safetyParam = EPS_SCALE[candidate]
@@ -201,7 +201,7 @@ class CarInterface(CarInterfaceBase):
     return ret
 
   @staticmethod
-  def init(CP, CP_SP, can_recv, can_send, communication_control=None):
+  def init(CP, CP_SP, CP_AC, can_recv, can_send, communication_control=None):
     # disable radar if alpha longitudinal toggled on radar-ACC car without CAN filter/smartDSU
     if CP.flags & ToyotaFlags.DISABLE_RADAR.value:
       if communication_control is None:

@@ -91,7 +91,7 @@ class TestTeslaFingerprint(unittest.TestCase):
       fingerprint = gen_empty_fingerprint()
       if radar:
         fingerprint[1][RADAR_START_ADDR] = 8
-      CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], False, False, False)
+      CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], False, False, False, False)
       assert CP.radarUnavailable != radar
 
   def test_no_radar_car(self):
@@ -100,5 +100,5 @@ class TestTeslaFingerprint(unittest.TestCase):
       fingerprint = gen_empty_fingerprint()
       if radar:
         fingerprint[1][RADAR_START_ADDR] = 8
-      CP = CarInterface.get_params(CAR.TESLA_MODEL_X, fingerprint, [], False, False, False)
+      CP = CarInterface.get_params(CAR.TESLA_MODEL_X, fingerprint, [], False, False, False, False)
       assert CP.radarUnavailable  # Always unavailable since no radar DBC

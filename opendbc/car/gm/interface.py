@@ -38,8 +38,8 @@ class CarInterface(CarInterfaceBase, CarInterfaceExt):
   DRIVABLE_GEARS = (structs.CarState.GearShifter.sport, structs.CarState.GearShifter.low,
                     structs.CarState.GearShifter.eco, structs.CarState.GearShifter.manumatic)
 
-  def __init__(self, CP, CP_SP):
-    CarInterfaceBase.__init__(self, CP, CP_SP)
+  def __init__(self, CP, CP_SP, CP_AC):
+    CarInterfaceBase.__init__(self, CP, CP_SP, CP_AC)
     CarInterfaceExt.__init__(self, CP, CarInterfaceBase)
 
   @staticmethod
@@ -99,7 +99,7 @@ class CarInterface(CarInterfaceBase, CarInterfaceExt):
       return self.lateral_accel_from_torque_linear
 
   @staticmethod
-  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
+  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, prefer_torque_tune, docs) -> structs.CarParams:
     ret.brand = "gm"
     ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.gm)]
     ret.autoResumeSng = False

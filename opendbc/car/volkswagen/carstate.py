@@ -9,8 +9,8 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class CarState(CarStateBase):
-  def __init__(self, CP, CP_SP):
-    super().__init__(CP, CP_SP)
+  def __init__(self, CP, CP_SP, CP_AC):
+    super().__init__(CP, CP_SP, CP_AC)
     self.frame = 0
     self.eps_init_complete = False
     self.CCP = CarControllerParams(CP)
@@ -316,7 +316,7 @@ class CarState(CarStateBase):
     return temp_fault, perm_fault
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP, CP_SP, CP_AC):
     if CP.flags & VolkswagenFlags.PQ:
       return CarState.get_can_parsers_pq(CP)
 

@@ -17,8 +17,8 @@ def get_safety_CP():
 
 
 class CarController(CarControllerBase, CoopSteeringCarController):
-  def __init__(self, dbc_names, CP, CP_SP):
-    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
+  def __init__(self, dbc_names, CP, CP_SP, CP_AC):
+    CarControllerBase.__init__(self, dbc_names, CP, CP_SP, CP_AC)
     CoopSteeringCarController.__init__(self)
     self.apply_angle_last = 0
     self.packer = CANPacker(dbc_names[Bus.party])
@@ -27,7 +27,7 @@ class CarController(CarControllerBase, CoopSteeringCarController):
     # Vehicle model used for lateral limiting
     self.VM = VehicleModel(get_safety_CP())
 
-  def update(self, CC, CC_SP, CS, now_nanos):
+  def update(self, CC, CC_SP, CC_AC, CS, now_nanos):
     CoopSteeringCarController.update(self, self.CP_SP)
     actuators = CC.actuators
     can_sends = []
