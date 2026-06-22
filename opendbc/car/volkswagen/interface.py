@@ -70,11 +70,14 @@ class CarInterface(CarInterfaceBase):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
     else:
       ret.steerActuatorDelay = 0.1
-      ret.lateralTuning.pid.kpBP = [0.]
-      ret.lateralTuning.pid.kiBP = [0.]
-      ret.lateralTuning.pid.kf = 0.00006
-      ret.lateralTuning.pid.kpV = [0.6]
-      ret.lateralTuning.pid.kiV = [0.2]
+      if prefer_torque_tune:
+        CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      else:
+        ret.lateralTuning.pid.kpBP = [0.]
+        ret.lateralTuning.pid.kiBP = [0.]
+        ret.lateralTuning.pid.kf = 0.00006
+        ret.lateralTuning.pid.kpV = [0.6]
+        ret.lateralTuning.pid.kiV = [0.2]
 
     # Global longitudinal tuning defaults, can be overridden per-vehicle
 
@@ -85,6 +88,8 @@ class CarInterface(CarInterfaceBase):
       safety_configs[0].safetyParam |= VolkswagenSafetyFlags.LONG_CONTROL.value
       if ret.transmissionType == TransmissionType.manual:
         ret.minEnableSpeed = 4.5
+      # acspilot: VW long tune — accounts for the lead-distance / ACC_Anhalteweg feeding latency
+      ret.longitudinalActuatorDelay = 0.5  # s
 
     # Per-vehicle overrides
 
@@ -101,5 +106,21 @@ class CarInterface(CarInterfaceBase):
     if CAN.pt >= 4:
       safety_configs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
     ret.safetyConfigs = safety_configs
+
+    return ret
+
+  @staticmethod
+  def _get_params_ac(stock_cp: structs.CarParams, ret: structs.CarParamsAC, candidate, fingerprint: dict[int, dict[int, int]],
+                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, prefer_torque_tune: bool, docs: bool) -> structs.CarParamsAC:
+    # acspilot: ACSPilot cruise/gap extensions (MQB only)
+    if not (stock_cp.flags & VolkswagenFlags.PQ or stock_cp.flags & VolkswagenFlags.MLB):
+      if alpha_long:
+        ret.stockAccOverrideAvailable = True
+        ret.stockAccSeparateGapControl = True
+      ret.accelButtonResumesCruise = False
+      ret.resumeButtonSetsDefaultVCruise = True
+      ret.decelButtonLimitedToVEgoWhenOverriding = False
+      ret.cruiseLongPressReverse = True
+      ret.cruiseLargeStep = 10
 
     return ret
