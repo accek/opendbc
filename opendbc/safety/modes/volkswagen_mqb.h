@@ -88,6 +88,20 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
     {.msg = {{MSG_MOTOR_20, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_MOTOR_14, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_GRA_ACC_01, 0, 8, 33U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+  };
+
+  // acspilot: with openpilot longitudinal the car has the stock ACC radar, whose messages on the camera
+  // bus are monitored to track the stock-ACC-override handoff, so additionally require them. Cars without
+  // openpilot long (stock-ACC-override is gated on alpha-long, same as FLAG_VOLKSWAGEN_LONG_CONTROL) don't
+  // run the override and may not even have these messages, so they aren't required there.
+  static RxCheck volkswagen_mqb_long_rx_checks[] = {
+    {.msg = {{MSG_ESP_19, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_LH_EPS_03, 0, 8, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_ESP_05, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_TSK_06, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_MOTOR_20, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_MOTOR_14, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_GRA_ACC_01, 0, 8, 33U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     // acspilot: stock ACC messages on the camera bus, used to track stock ACC override state
     {.msg = {{MSG_ACC_02, 2, 8, 17U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_ACC_04, 2, 8, 17U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
@@ -111,7 +125,7 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
   SAFETY_UNUSED(param);
 #endif
 
-  return volkswagen_longitudinal ? BUILD_SAFETY_CFG(volkswagen_mqb_rx_checks, VOLKSWAGEN_MQB_LONG_TX_MSGS) : \
+  return volkswagen_longitudinal ? BUILD_SAFETY_CFG(volkswagen_mqb_long_rx_checks, VOLKSWAGEN_MQB_LONG_TX_MSGS) : \
                                    BUILD_SAFETY_CFG(volkswagen_mqb_rx_checks, VOLKSWAGEN_MQB_STOCK_TX_MSGS);
 }
 
