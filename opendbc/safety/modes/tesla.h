@@ -334,11 +334,11 @@ static bool tesla_tx_hook(const CANPacket_t *msg) {
 
 static bool tesla_fwd_hook(const CANPacket_t *msg) {
   int bus_num = msg->bus;
-  int addr = msg->addr;
   bool block_msg = false;
 
   if (bus_num == 2) {
     if (!tesla_autopark) {
+      int addr = msg->addr;
       // APS_eacMonitor
       if (addr == 0x27d) {
         block_msg = true;

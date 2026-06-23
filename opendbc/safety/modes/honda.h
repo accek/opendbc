@@ -503,11 +503,11 @@ static safety_config honda_bosch_init(uint16_t param) {
 
 static bool honda_nidec_fwd_hook(const CANPacket_t *msg) {
   int bus_num = msg->bus;
-  int addr = msg->addr;
   bool block_msg = false;
 
   if (bus_num == 2) {
     // forwarded if stock AEB is active
+    int addr = msg->addr;
     bool is_brake_msg = addr == 0x1FA;
     block_msg = is_brake_msg && !honda_fwd_brake;
   }
