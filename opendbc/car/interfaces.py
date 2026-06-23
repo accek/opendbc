@@ -436,7 +436,8 @@ class CarControllerBase(ABC):
     self.secoc_key: bytes = b"00" * 16
 
   @abstractmethod
-  def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CC_AC: structs.CarControlAC, CS: CarStateBase, now_nanos: int) -> tuple[structs.CarControl.Actuators, list[CanData]]:
+  def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CC_AC: structs.CarControlAC, CS: CarStateBase,
+             now_nanos: int) -> tuple[structs.CarControl.Actuators, list[CanData]]:
     pass
 
 

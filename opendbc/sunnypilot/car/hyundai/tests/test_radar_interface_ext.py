@@ -33,8 +33,9 @@ class TestRadarInterfaceExt(unittest.TestCase):
     CP.flags |= additional_flags
 
     CP_SP = CarInterface.get_non_essential_params_sp(CP, car_name)
+    CP_AC = CarInterface.get_non_essential_params_ac(CP, car_name)
 
-    CI = CarInterface(CP, CP_SP)
+    CI = CarInterface(CP, CP_SP, CP_AC)
 
     RD = CI.RadarInterface(CP, CP_SP)
 

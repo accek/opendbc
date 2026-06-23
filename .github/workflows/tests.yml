@@ -107,7 +107,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        repository: 'sunnypilot/sunnypilot'
+        # ACSPilot: build this fork's own openpilot (whose cereal matches this opendbc) instead of upstream
+        # sunnypilot. Building sunnypilot/sunnypilot against this fork's opendbc double-compiles car.capnp
+        # (cereal symlink + directly-built opendbc_repo) -> "Duplicate ID" capnp error.
+        repository: 'accek/openpilot'
         ref: 'master'
         submodules: true
     - run: ./tools/op.sh setup

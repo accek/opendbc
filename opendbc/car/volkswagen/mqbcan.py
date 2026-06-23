@@ -157,7 +157,8 @@ def create_acc_accel_control_1(values, acc_type, accel, acc_control, stopping, s
     "ACC_StartStopp_Info": max(startstop, values["ACC_StartStopp_Info"]),  # stock radar may know better
     "ACC_Sollbeschleunigung_02": accel if acc_enabled else 3.01,
     "ACC_zul_Regelabw_unten": clip(accel + 0.2, 0.0, 0.2) if acc_enabled and not stopping else 0,  # TODO: even better adjustment of comfort-band
-    "ACC_zul_Regelabw_oben": clip((accel + 1.5) * (0.125 / 1.5), 0, 0.125) if acc_enabled and not stopping else 0,  # TODO: even better adjustment of comfort-band
+    "ACC_zul_Regelabw_oben": (clip((accel + 1.5) * (0.125 / 1.5), 0, 0.125)
+                              if acc_enabled and not stopping else 0),  # TODO: even better adjustment of comfort-band
     "ACC_neg_Sollbeschl_Grad_02": 4.0 if acc_enabled else 0,  # TODO: dynamic adjustment of jerk limits
     "ACC_pos_Sollbeschl_Grad_02": pos_jerk,
     "ACC_Anfahren": starting,

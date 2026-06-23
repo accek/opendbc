@@ -318,6 +318,26 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
     self.safety.safety_fwd_hook(self._acc_06_status_msg(3, accel=self.INACTIVE_ACCEL, cnt=1))
     self.assertEqual(-1, self.safety.safety_fwd_hook(make_msg(2, MSG_ACC_02, 8)))
 
+  def test_fwd_stock_acc_counter_continuity(self):
+    # acspilot: forwarded stock ACC messages must keep sequential counters so they never duplicate the
+    # counters openpilot sends across a stock<->OP handoff; a non-sequential counter blocks the forward
+    self._tx(self._torque_cmd_msg(0))  # mark tx attempted so the fwd hook begins gating
+    # stock ACC engaged (status 5) -> ACC_06 forwarded; sequential counters are accepted
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=0)))
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=1)))
+    # out-of-sequence counter -> forwarding is blocked
+    self.assertEqual(-1, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=5)))
+
+  def test_long_allowed_ts_pinned_after_grace(self):
+    # acspilot: once the grace period lapses with controls not allowed, the rx hook pins the
+    # long-allowed timestamp just past the grace window so timer wraparound can't re-enable accel
+    self.safety.set_controls_allowed(False)
+    self.safety.set_timer(10 * ACC_CHECKS_GRACE_PERIOD_US)
+    # rx with long enabled, controls not allowed, well past the grace period -> pins last_ts
+    self._rx(self._tsk_status_msg(False, main_switch=True))
+    # grace has truly expired, so in-bounds accel stays rejected with controls not allowed
+    self.assertFalse(self._tx(self._acc_06_msg(MAX_ACCEL, cnt=0)))
+
 
 if __name__ == "__main__":
   unittest.main()

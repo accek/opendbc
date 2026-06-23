@@ -25,7 +25,7 @@ class TestHondaEpsMod(unittest.TestCase):
     car_fw = [CarFw(ecu="eps", fwVersion=fw)]
 
     CarInterface = interfaces[car_name]
-    CP = CarInterface.get_params(car_name, fingerprint, car_fw, False, False, False)
+    CP = CarInterface.get_params(car_name, fingerprint, car_fw, False, False, False, False)
     _ = CarInterface.get_params_sp(CP, car_name, fingerprint, car_fw, False, False, False)
 
     self.assertFalse(CP.dashcamOnly)
