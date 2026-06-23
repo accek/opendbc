@@ -26,13 +26,13 @@ typedef struct {
 // transmissions so that switching between the two never produces a duplicate counter (which would
 // fault the stock ACC module). The destination bus is used as the key.
 static MqbCounterCheck volkswagen_mqb_long_counter_checks[] = {
-  {.msg = {MSG_ACC_02, 0, 8}},
-  {.msg = {MSG_ACC_04, 0, 8}},
-  {.msg = {MSG_ACC_06, 0, 8}},
-  {.msg = {MSG_ACC_07, 0, 8}},
-  {.msg = {MSG_ACC_13, 0, 8}},
-  {.msg = {MSG_TSK_06, 2, 8}},
-  {.msg = {-1, 0, 0}},
+  {.msg = {MSG_ACC_02, 0, 8, .check_relay = false}},
+  {.msg = {MSG_ACC_04, 0, 8, .check_relay = false}},
+  {.msg = {MSG_ACC_06, 0, 8, .check_relay = false}},
+  {.msg = {MSG_ACC_07, 0, 8, .check_relay = false}},
+  {.msg = {MSG_ACC_13, 0, 8, .check_relay = false}},
+  {.msg = {MSG_TSK_06, 2, 8, .check_relay = false}},
+  {.msg = {-1, 0, 0, .check_relay = false}},
 };
 
 static uint32_t volkswagen_mqb_long_allowed_last_ts = 0;
