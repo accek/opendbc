@@ -104,6 +104,7 @@ void init_tests(void);
 
 void set_honda_fwd_brake(bool c);
 bool get_honda_fwd_brake(void);
+void reset_volkswagen_mqb_long_counters(void);
 void set_honda_alt_brake_msg(bool c);
 void set_honda_bosch_long(bool c);
 int get_honda_hw(void);

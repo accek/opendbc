@@ -262,6 +262,19 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
     # resuming the sequence is accepted again
     self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=2)))
 
+  def test_acc_counter_reset(self):
+    # acspilot: test-only reset of the counter-continuity tracking. test_models rebuilds the
+    # CarController per tx scenario (restarting its counter source) while reusing one safety instance,
+    # so it resets this state between scenarios to mirror a fresh control session.
+    self.safety.set_timer(ACC_CHECKS_GRACE_PERIOD_US + 1)
+    self.safety.set_controls_allowed(True)
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=0)))
+    # without a reset, a counter that isn't last+1 is rejected
+    self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=0)))
+    # after a reset, the next counter is accepted as a fresh start regardless of the prior value
+    self.safety.reset_volkswagen_mqb_long_counters()
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=0)))
+
   def test_accel_grace_period(self):
     # acspilot: in-bounds accel stays valid within the grace period after controls are disabled, so a
     # few dropped frames don't fault the stock ACC module

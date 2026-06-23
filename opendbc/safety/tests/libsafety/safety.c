@@ -199,6 +199,16 @@ bool get_honda_fwd_brake(void){
   return honda_fwd_brake;
 }
 
+// acspilot test-only: reset the VW MQB long ACC counter-continuity tracking. test_models rebuilds the
+// CarController per tx scenario (resetting its frame/counter source) while reusing one safety instance,
+// so the persisted last_counter would spuriously fail the first message of each later scenario. On-car
+// the controller runs continuously, so this never happens; the reset mirrors a fresh control session.
+void reset_volkswagen_mqb_long_counters(void){
+  for (MqbCounterCheck* check = &volkswagen_mqb_long_counter_checks[0]; check->msg.addr != -1; check++) {
+    check->last_counter = -1;
+  }
+}
+
 static MADSState *get_mads_state(void) {
   return &m_mads_state;
 }

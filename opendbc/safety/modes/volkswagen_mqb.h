@@ -30,7 +30,9 @@ static MqbCounterCheck volkswagen_mqb_long_counter_checks[] = {
   {.msg = {MSG_ACC_04, 0, 8, .check_relay = false}},
   {.msg = {MSG_ACC_06, 0, 8, .check_relay = false}},
   {.msg = {MSG_ACC_07, 0, 8, .check_relay = false}},
-  {.msg = {MSG_ACC_13, 0, 8, .check_relay = false}},
+  // NB: ACC_13 (cluster speed HUD) is intentionally absent -- it carries no counter
+  // signal, so the continuity check below would read static data bits and spuriously
+  // block it after the first frame. It stays in the LONG TX allowlist, just uncounted.
   {.msg = {MSG_TSK_06, 2, 8, .check_relay = false}},
   {.msg = {-1, 0, 0, .check_relay = false}},
 };
