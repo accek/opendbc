@@ -168,9 +168,11 @@ class CarState(CarStateBase):
     # Stock messages forwarded by the carcontroller while the stock ACC is in control
     self.update_stock_values("LH_EPS_03", pt_cp)
     self.update_stock_values("GRA_ACC_01", pt_cp)
-    # LKAS HUD (LDW_02) must be forwarded regardless of networkLocation; on gateway cars the cluster
-    # otherwise sees the lane-assist frame go missing and shows a continuous LKAS fault.
-    self.update_stock_values("LDW_02", cam_cp)
+    # LKAS HUD (LDW_02) is forwarded regardless of networkLocation; on gateway cars the cluster otherwise
+    # sees the lane-assist frame go missing and shows a continuous LKAS fault. Only when the stock camera
+    # actually emits LDW_02 (STOCK_LDW_PRESENT), so cars/routes without it don't fail can_valid.
+    if self.CP.flags & VolkswagenFlags.STOCK_LDW_PRESENT:
+      self.update_stock_values("LDW_02", cam_cp)
 
     if self.CP.openpilotLongitudinalControl:
       self.update_stock_values("ACC_02", ext_cp)
@@ -379,11 +381,12 @@ class CarState(CarStateBase):
       cam_messages += [
         ("HCA_01", 1),  # From R242 Driver assistance camera, 50Hz if steering/1Hz if not
       ]
-    cam_messages += [
-      # LKAS HUD forwarded by the carcontroller. Declared at 1Hz because the camera's send rate varies
-      # with LKAS state (like HCA_01); the lenient timeout avoids false can_valid drops.
-      ("LDW_02", 1),
-    ]
+    if CP.flags & VolkswagenFlags.STOCK_LDW_PRESENT:
+      cam_messages += [
+        # LKAS HUD forwarded by the carcontroller. Declared at 1Hz because the camera's send rate varies
+        # with LKAS state (like HCA_01); the lenient timeout avoids false can_valid drops.
+        ("LDW_02", 1),
+      ]
 
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
