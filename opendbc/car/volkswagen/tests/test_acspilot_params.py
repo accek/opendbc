@@ -1,13 +1,20 @@
-from opendbc.car import structs
+from opendbc.car import Bus, structs
 from opendbc.car.volkswagen.carstate import CarState as VWCarState
 from opendbc.car.volkswagen.interface import CarInterface
 from opendbc.car.volkswagen.values import CAR, CarControllerParams, VolkswagenFlags
 
 ButtonTypeAC = structs.CarStateAC.ButtonEvent.Type
 
+LDW_02_ADDR = 0x397
+HCA_01_ADDR = 0x126
+
+
+def _first_mqb():
+  return next(c for c in CAR if not (c.config.flags & (VolkswagenFlags.PQ | VolkswagenFlags.MLB)))
+
 
 def _mqb_buttons_ac():
-  mqb = next(c for c in CAR if not (c.config.flags & (VolkswagenFlags.PQ | VolkswagenFlags.MLB)))
+  mqb = _first_mqb()
   cp = structs.CarParams(carFingerprint=str(mqb))
   cp.flags = mqb.config.flags
   return CarControllerParams(cp).BUTTONS_AC
@@ -89,3 +96,46 @@ class TestVolkswagenGapButtons:
 
     # value 2 -> gap down pressed
     assert fired(2, ButtonTypeAC.gapAdjustCruiseDown, True)
+
+
+class TestVolkswagenStockLdwPresent:
+  # acspilot: the LKAS HUD (LDW_02) is forwarded by the carcontroller so gateway cars don't show a
+  # continuous LKAS fault. It is only tracked when the stock camera actually emits it -- detected via
+  # 0x397 in the cam-bus fingerprint and stored as the STOCK_LDW_PRESENT flag. Tracking it
+  # unconditionally made it a required can_valid message and broke gateway MQB cars/routes that don't
+  # send it (regression: SKODA_KAROQ_MK1 test_car_interface, can_invalid_cnt != 0).
+
+  def _get_params_flags(self, cam_addrs):
+    mqb = _first_mqb()
+    ret = structs.CarParams(carFingerprint=str(mqb))
+    fingerprint = {0: {}, 1: {}, 2: {a: 8 for a in cam_addrs}}
+    out = CarInterface._get_params(ret, str(mqb), fingerprint, [], False, False, False, False)
+    return out.flags
+
+  def test_flag_set_when_ldw_in_fingerprint(self):
+    assert self._get_params_flags([HCA_01_ADDR, LDW_02_ADDR]) & VolkswagenFlags.STOCK_LDW_PRESENT
+
+  def test_flag_clear_when_ldw_absent(self):
+    # camera present (HCA_01) but no LDW_02 -- mirrors the gateway SKODA_KAROQ_MK1 route
+    assert not self._get_params_flags([HCA_01_ADDR]) & VolkswagenFlags.STOCK_LDW_PRESENT
+
+  def _cam_can_valid_without_ldw_frames(self, stock_ldw_present):
+    mqb = _first_mqb()
+    cp = structs.CarParams(carFingerprint=str(mqb))
+    cp.flags = mqb.config.flags
+    if stock_ldw_present:
+      cp.flags |= VolkswagenFlags.STOCK_LDW_PRESENT.value
+    cam = VWCarState.get_can_parsers(cp, None, None)[Bus.cam]
+    t = 0
+    for _ in range(400):  # feed empty frames; a tracked-but-never-received message keeps can_valid False
+      t += 10_000_000
+      cam.update([(t, [])])
+    return cam.can_valid
+
+  def test_ldw_not_required_for_can_valid_when_absent(self):
+    # flag off -> LDW_02 not in cam_messages -> can_valid holds without any LDW_02 frames
+    assert self._cam_can_valid_without_ldw_frames(stock_ldw_present=False) is True
+
+  def test_ldw_tracked_for_can_valid_when_present(self):
+    # flag on -> LDW_02 tracked at 1Hz -> missing frames correctly drop can_valid
+    assert self._cam_can_valid_without_ldw_frames(stock_ldw_present=True) is False
