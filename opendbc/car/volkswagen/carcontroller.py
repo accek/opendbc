@@ -194,7 +194,13 @@ class CarController(CarControllerBase):
       # MQB racks reset the uninterrupted steering timer after a single frame
       # of HCA disabled; this is done whenever output happens to be zero.
 
-      if CC.latActive and CS.eps_init_complete:
+      # Don't command the EPS while the car is fully stationary (all wheel speeds zero). This both honors
+      # "don't steer at standstill" and avoids poking the EPS when it may have dropped out (e.g. the engine
+      # was shut off by the stop-start system), which can otherwise provoke a steering fault.
+      ws = CS.out.wheelSpeeds
+      stationary = max(ws.fl, ws.fr, ws.rl, ws.rr) == 0.0
+
+      if CC.latActive and CS.eps_init_complete and not stationary:
         new_torque = int(round(actuators.torque * self.CCP.STEER_MAX))
         apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, self.CCP)
         self.hca_frame_timer_running += self.CCP.STEER_STEP

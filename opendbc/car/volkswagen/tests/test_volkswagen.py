@@ -5,6 +5,7 @@ import unittest
 from opendbc.car import DT_CTRL
 from opendbc.car.structs import CarParams
 from opendbc.car.volkswagen.carcontroller import HCAMitigation
+from opendbc.car.volkswagen.carstate import CarState
 from opendbc.car.volkswagen.values import CAR, CarControllerParams as CCP, FW_QUERY_CONFIG, WMI
 from opendbc.car.volkswagen.fingerprints import FW_VERSIONS
 
@@ -28,6 +29,41 @@ class TestVolkswagenHCAMitigation(unittest.TestCase):
         should_nudge = actuator_value != 0 and frame == self.STUCK_TORQUE_FRAMES
         expected_torque = actuator_value - (1, -1)[actuator_value < 0] if should_nudge else actuator_value
         assert hca_mitigation.update(actuator_value, actuator_value) == expected_torque, f"{frame=}"
+
+class TestVolkswagenSteerFault(unittest.TestCase):
+  """update_hca_state must not raise a spurious steering fault while the engine is stopped (stop-start)."""
+
+  @staticmethod
+  def _carstate(frame=700):
+    # update_hca_state only touches self.eps_init_complete and self.frame, so build a bare instance.
+    cs = object.__new__(CarState)
+    cs.eps_init_complete = False
+    cs.frame = frame  # > 600 so eps_init_complete latches, exercising the post-init fault paths
+    return cs
+
+  def test_disabled_is_perm_fault_when_engine_running(self):
+    # Baseline (unchanged): EPS DISABLED while the engine runs is a permanent steering fault.
+    temp, perm = self._carstate().update_hca_state("DISABLED", drive_mode=True, engine_running=True)
+    assert perm and not temp
+
+  def test_fault_when_engine_running(self):
+    # Baseline (unchanged): EPS FAULT after init is a permanent fault; REJECTED is temporary.
+    temp, perm = self._carstate().update_hca_state("FAULT", drive_mode=True, engine_running=True)
+    assert perm and not temp
+    temp, perm = self._carstate().update_hca_state("REJECTED", drive_mode=True, engine_running=True)
+    assert temp and not perm
+
+  def test_no_fault_when_engine_stopped(self):
+    # Stop-start engine-off: the EPS reports DISABLED/FAULT/REJECTED but it must not surface a steer fault.
+    for status in ("DISABLED", "FAULT", "REJECTED", "PREEMPTED"):
+      with self.subTest(status=status):
+        temp, perm = self._carstate().update_hca_state(status, drive_mode=True, engine_running=False)
+        assert not temp and not perm
+
+  def test_active_never_faults(self):
+    temp, perm = self._carstate().update_hca_state("ACTIVE", drive_mode=True, engine_running=True)
+    assert not temp and not perm
+
 
 class TestVolkswagenPlatformConfigs(unittest.TestCase):
   def test_spare_part_fw_pattern(self):
