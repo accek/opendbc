@@ -361,12 +361,7 @@ class CarStateBase(ABC):
     return structs.CarStateAC()
 
   def parse_wheel_speeds(self, cs, fl, fr, rl, rr, unit=CV.KPH_TO_MS):
-    factor = unit * self.CP.wheelSpeedFactor
-    cs.wheelSpeeds.fl = fl * factor
-    cs.wheelSpeeds.fr = fr * factor
-    cs.wheelSpeeds.rl = rl * factor
-    cs.wheelSpeeds.rr = rr * factor
-    cs.vEgoRaw = sum((fl, fr, rl, rr)) / 4 * factor
+    cs.vEgoRaw = sum((fl, fr, rl, rr)) / 4 * unit * self.CP.wheelSpeedFactor
     cs.vEgo, cs.aEgo = self.update_speed_kf(cs.vEgoRaw)
 
   def update_speed_kf(self, v_ego_raw):
