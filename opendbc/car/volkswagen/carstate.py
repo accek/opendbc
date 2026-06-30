@@ -7,12 +7,18 @@ from opendbc.car.volkswagen.values import DBC, CanBus, NetworkLocation, Transmis
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
+# Engine is considered running above this RPM. Idle is ~650-900 rpm and cranking ~200-300 rpm, so this
+# cleanly separates a running engine from an engine the stop-start system has shut off (0 rpm), including
+# when it cuts the engine while the car is still rolling (coasting/sailing).
+ENGINE_RUNNING_RPM = 400
+
 
 class CarState(CarStateBase):
   def __init__(self, CP, CP_SP, CP_AC):
     super().__init__(CP, CP_SP, CP_AC)
     self.frame = 0
     self.eps_init_complete = False
+    self.engine_running = True  # set from the MQB powertrain bus; defaults True for PQ/MLB
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.button_states_ac = {button.event_type: False for button in self.CCP.BUTTONS_AC}
@@ -124,10 +130,13 @@ class CarState(CarStateBase):
     # Shared logic
     ret.vEgoCluster = pt_cp.vl["Kombi_01"]["KBI_angez_Geschw"] * CV.KPH_TO_MS
 
-    # When the stop-start system shuts the engine off at standstill, the EPS briefly drops out and reports
-    # DISABLED/FAULT. Track engine-running so we don't flag a spurious steering fault during that window.
-    engine_running = not bool(pt_cp.vl["Motor_14"]["MO_StartStopp_Motorstopp"])
-    self.parse_mlb_mqb_steering_state(ret, pt_cp, engine_running=engine_running)
+    # When the stop-start system shuts the engine off, the EPS can drop out and report DISABLED/FAULT.
+    # Track engine-running both to avoid flagging a spurious steering fault and to inhibit steering output
+    # in that window (see carcontroller). Require RPM above the running threshold AND the stop-start status
+    # not asserting an engine stop, so this also catches an engine cut while the car is still rolling.
+    engine_stopped = bool(pt_cp.vl["Motor_14"]["MO_StartStopp_Motorstopp"])
+    self.engine_running = pt_cp.vl["Motor_12"]["MO_Drehzahl_01"] > ENGINE_RUNNING_RPM and not engine_stopped
+    self.parse_mlb_mqb_steering_state(ret, pt_cp, engine_running=self.engine_running)
 
     ret.gasPressed = pt_cp.vl["Motor_20"]["MO_Fahrpedalrohwert_01"] > 0
     ret.espActive = bool(pt_cp.vl["ESP_21"]["ESP_Eingriff"])
