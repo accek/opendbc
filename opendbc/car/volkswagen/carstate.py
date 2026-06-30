@@ -12,6 +12,16 @@ ButtonType = structs.CarState.ButtonEvent.Type
 # when it cuts the engine while the car is still rolling (coasting/sailing).
 ENGINE_RUNNING_RPM = 400
 
+# ESP_10 per-wheel ESP_*_Fahrtrichtung direction enum.
+ESP_WHEEL_DIRECTION_REVERSE = 1  # 0=forward, 1=reverse, 2=init, 3=invalid/not installed
+
+
+def wheel_direction_sign(direction):
+  # ESP_19 reports unsigned wheel-speed magnitudes; ESP_10 carries the per-wheel travel direction. Only an
+  # explicit reverse negates the magnitude, so a missing/init/invalid direction falls back to forward (the
+  # previous unsigned behavior). Mirrors the GM approach to producing a signed vEgo when reversing.
+  return -1 if direction == ESP_WHEEL_DIRECTION_REVERSE else 1
+
 
 class CarState(CarStateBase):
   def __init__(self, CP, CP_SP, CP_AC):
@@ -84,11 +94,15 @@ class CarState(CarStateBase):
       if self.CP.flags & VolkswagenFlags.KOMBI_PRESENT:
         self.upscale_lead_car_signal = bool(pt_cp.vl["Kombi_03"]["KBI_Variante"])  # Analog vs digital instrument cluster
 
+      # Sign each wheel speed by its ESP_10 travel direction so vEgo goes negative when the car moves
+      # backward (e.g. rolling back on a hill), independent of the selected gear.
+      esp_10 = pt_cp.vl["ESP_10"]
+      esp_19 = pt_cp.vl["ESP_19"]
       self.parse_wheel_speeds(ret,
-        pt_cp.vl["ESP_19"]["ESP_VL_Radgeschw_02"],
-        pt_cp.vl["ESP_19"]["ESP_VR_Radgeschw_02"],
-        pt_cp.vl["ESP_19"]["ESP_HL_Radgeschw_02"],
-        pt_cp.vl["ESP_19"]["ESP_HR_Radgeschw_02"],
+        wheel_direction_sign(esp_10["ESP_VL_Fahrtrichtung"]) * esp_19["ESP_VL_Radgeschw_02"],
+        wheel_direction_sign(esp_10["ESP_VR_Fahrtrichtung"]) * esp_19["ESP_VR_Radgeschw_02"],
+        wheel_direction_sign(esp_10["ESP_HL_Fahrtrichtung"]) * esp_19["ESP_HL_Radgeschw_02"],
+        wheel_direction_sign(esp_10["ESP_HR_Fahrtrichtung"]) * esp_19["ESP_HR_Radgeschw_02"],
       )
 
       if self.CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT:

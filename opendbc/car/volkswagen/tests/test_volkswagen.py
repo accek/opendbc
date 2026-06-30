@@ -5,7 +5,7 @@ import unittest
 from opendbc.car import DT_CTRL
 from opendbc.car.structs import CarParams
 from opendbc.car.volkswagen.carcontroller import HCAMitigation
-from opendbc.car.volkswagen.carstate import CarState
+from opendbc.car.volkswagen.carstate import CarState, wheel_direction_sign
 from opendbc.car.volkswagen.values import CAR, CarControllerParams as CCP, FW_QUERY_CONFIG, WMI
 from opendbc.car.volkswagen.fingerprints import FW_VERSIONS
 
@@ -63,6 +63,19 @@ class TestVolkswagenSteerFault(unittest.TestCase):
   def test_active_never_faults(self):
     temp, perm = self._carstate().update_hca_state("ACTIVE", drive_mode=True, engine_running=True)
     assert not temp and not perm
+
+
+class TestVolkswagenWheelDirection(unittest.TestCase):
+  """ESP_10 per-wheel direction signs the unsigned ESP_19 wheel-speed magnitude (GM-style signed vEgo)."""
+
+  def test_reverse_negates(self):
+    assert wheel_direction_sign(1) == -1  # 1 = Rueckwaerts
+
+  def test_forward_init_invalid_stay_positive(self):
+    # 0 = forward, 2 = init, 3 = invalid/not installed -> fall back to forward (previous unsigned behavior)
+    for direction in (0, 2, 3):
+      with self.subTest(direction=direction):
+        assert wheel_direction_sign(direction) == 1
 
 
 class TestVolkswagenPlatformConfigs(unittest.TestCase):
