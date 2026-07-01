@@ -7,11 +7,6 @@ from opendbc.car.volkswagen.values import DBC, CanBus, NetworkLocation, Transmis
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
-# Engine is considered running above this RPM. Idle is ~650-900 rpm and cranking ~200-300 rpm, so this
-# cleanly separates a running engine from an engine the stop-start system has shut off (0 rpm), including
-# when it cuts the engine while the car is still rolling (coasting/sailing).
-ENGINE_RUNNING_RPM = 400
-
 # ESP_10 per-wheel ESP_*_Fahrtrichtung direction enum.
 ESP_WHEEL_DIRECTION_REVERSE = 1  # 0=forward, 1=reverse, 2=init, 3=invalid/not installed
 
@@ -146,10 +141,10 @@ class CarState(CarStateBase):
 
     # When the stop-start system shuts the engine off, the EPS can drop out and report DISABLED/FAULT.
     # Track engine-running both to avoid flagging a spurious steering fault and to inhibit steering output
-    # in that window (see carcontroller). Require RPM above the running threshold AND the stop-start status
-    # not asserting an engine stop, so this also catches an engine cut while the car is still rolling.
-    engine_stopped = bool(pt_cp.vl["Motor_14"]["MO_StartStopp_Motorstopp"])
-    self.engine_running = pt_cp.vl["Motor_12"]["MO_Drehzahl_01"] > ENGINE_RUNNING_RPM and not engine_stopped
+    # in that window (see carcontroller). MO_Motor_laeuft ("engine running") is the engine ECU's own flag,
+    # so it also covers an engine cut while the car is still rolling. It rides on Motor_14, which is already
+    # on the powertrain bus - unlike Motor_12 (engine RPM), which sits on a bus we don't parse here.
+    self.engine_running = bool(pt_cp.vl["Motor_14"]["MO_Motor_laeuft"])
     self.parse_mlb_mqb_steering_state(ret, pt_cp, engine_running=self.engine_running)
 
     ret.gasPressed = pt_cp.vl["Motor_20"]["MO_Fahrpedalrohwert_01"] > 0
