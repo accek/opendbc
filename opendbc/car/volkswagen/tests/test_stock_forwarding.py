@@ -102,3 +102,26 @@ class TestStockFrameForwarding:
     assert _counters(sends, 2) == [9]
     sends = []
     assert not cc.forward_message(cs, mqbcan.MSG_TSK, 2, sends)
+
+  def test_long_backlog_is_capped_to_newest_frames(self):
+    # a card stall longer than the panda's counter tolerance: only the newest MAX_FORWARD_BACKLOG frames go
+    # out. With the stock ACC engaged the panda has forwarded all of them already, and a copy 8+ frames behind
+    # its slot would read as "ahead" (4-bit counter) and put stale frames back on the car bus.
+    packer = CANPacker(DBC)
+    cp = CANParser(DBC, [("TSK_06", 50)], 0)
+    cs, cc = _carstate(), _controller()
+    self._step(cs, cp, packer, list(range(9)))
+    sends = []
+    assert cc.forward_message(cs, mqbcan.MSG_TSK, 2, sends)
+    assert _counters(sends, 2) == [5, 6, 7, 8]
+    assert cc.forwarded_counters["TSK_06"] == 8
+    assert CarController.MAX_FORWARD_BACKLOG <= 7  # must stay below the panda's stale window (9..15 behind)
+
+  def test_short_backlog_unaffected_by_cap(self):
+    packer = CANPacker(DBC)
+    cp = CANParser(DBC, [("TSK_06", 50)], 0)
+    cs, cc = _carstate(), _controller()
+    self._step(cs, cp, packer, [12, 13, 14, 15])
+    sends = []
+    cc.forward_message(cs, mqbcan.MSG_TSK, 2, sends)
+    assert _counters(sends, 2) == [12, 13, 14, 15]

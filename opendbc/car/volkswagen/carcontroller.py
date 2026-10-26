@@ -366,6 +366,12 @@ class CarController(CarControllerBase):
     else:
       return max_value if hud_control.leadVisible else 0
 
+  # Longest backlog of stock frames re-sent in one step. Panda safety accepts a counter up to 8 ahead of the
+  # last one on the car bus and treats 9..15 as stale, so a copy of a stock frame the panda already forwarded
+  # is rejected only while it is at most 7 behind; 4 keeps a margin for the radar frames forwarded while the
+  # copies are in flight. A stall longer than this is beyond what the counter can disambiguate anyway.
+  MAX_FORWARD_BACKLOG = 4
+
   def can_forward_message(self, CS, msg_name):
     stock_values = CS.stock_values.get(msg_name)
     if stock_values is None:
@@ -389,7 +395,10 @@ class CarController(CarControllerBase):
     else:
       # Forward every stock frame received this step, not just the latest, so a card hiccup never skips a
       # counter on the car bus. Frames already forwarded (same COUNTER as the last one sent) are dropped.
-      frames = CS.stock_frames.get(msg_name) or [stock_values]
+      # The backlog is capped: while the stock ACC is engaged the panda forwards the radar's frames itself and
+      # our copies are late duplicates it rejects by counter, but the 4-bit counter cannot tell a frame 8 or
+      # more behind from one ahead, so replaying a long backlog would put stale frames back on the car bus.
+      frames = (CS.stock_frames.get(msg_name) or [stock_values])[-self.MAX_FORWARD_BACKLOG:]
     sent = False
     for values in frames:
       counter = values.get("COUNTER")
