@@ -75,3 +75,31 @@ class TestAccComfortBands:
       for speed in (0.0, 10.0, 30.0):
         lower, upper = mqbcan.acc_comfort_bands(accel, speed)
         assert 0.0 <= lower <= 1.512 and 0.0 <= upper <= 1.9375
+
+
+class TestAccFollowAccel:
+  # acspilot: ACC_Folgebeschl follows the stock radar's phases (see REVIEW.md §6)
+  def test_inactive_without_lead_or_acc(self):
+    assert mqbcan.acc_follow_accel(True, 0.5, None, False, False) == 3.02
+    assert mqbcan.acc_follow_accel(False, 0.5, 0.3, False, False) == 3.02
+
+  def test_moving_echoes_own_request(self):
+    assert mqbcan.acc_follow_accel(True, 0.8, 0.2, False, False) == 0.8
+    assert mqbcan.acc_follow_accel(True, -1.2, -0.3, False, False) == -1.2
+    # clipped to the signal range
+    assert mqbcan.acc_follow_accel(True, -7.0, 0.0, False, False) == -4.6
+    assert mqbcan.acc_follow_accel(True, 3.5, 0.0, False, False) == 2.99
+
+  def test_held_uses_lead_accel(self):
+    assert mqbcan.acc_follow_accel(True, -0.55, 0.4, True, False) == 0.4
+    # starting (hold release) goes back to the own request, as stock does
+    assert mqbcan.acc_follow_accel(True, 0.9, 0.4, True, True) == 0.9
+
+  def test_acc07_message_uses_rule(self):
+    stock = {"COUNTER": 5}
+    v = mqbcan.create_acc_accel_control_2(stock, 1, 0.7, 3, False, False, False, 0.1, None, 10.0, 0.6)
+    assert v["ACC_Folgebeschl"] == 0.7 and v["ACC_Sollbeschleunigung_02"] == 0.7
+    v = mqbcan.create_acc_accel_control_2(stock, 1, -0.55, 3, True, False, True, 0.3, 2.0, 0.0, 0.0)
+    assert v["ACC_Folgebeschl"] == 0.3
+    v = mqbcan.create_acc_accel_control_2(stock, 1, 0.7, 3, False, False, False, None, None, 10.0, 0.6)
+    assert v["ACC_Folgebeschl"] == 3.02
