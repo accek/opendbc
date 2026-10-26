@@ -368,20 +368,31 @@ class CarController(CarControllerBase):
         return False
       else:
         stock_values = {}
-    counter = stock_values.get("COUNTER")
-    prev_counter = self.forwarded_counters.get(msg_name)
-    if counter is not None and counter == prev_counter and not ignore_counter:
-      return False
-    self.forwarded_counters[msg_name] = counter
-    new_values = stock_values.copy()
-    new_values.pop("CHECKSUM", None)
     if ignore_counter:
-      new_values.pop("COUNTER", None)
-    if hook is not None:
-      new_values = hook(new_values, *args, **kwargs)
-      if new_values is None:
-        return False
-    can_sends.append(self.packer_pt.make_can_msg(msg_name, to_bus, new_values))
+      # frame-driven message (e.g. HCA_01): one copy per step, counter owned by the packer
+      frames = [stock_values]
+    else:
+      # Forward every stock frame received this step, not just the latest, so a card hiccup never skips a
+      # counter on the car bus. Frames already forwarded (same COUNTER as the last one sent) are dropped.
+      frames = CS.stock_frames.get(msg_name) or [stock_values]
+    sent = False
+    for values in frames:
+      counter = values.get("COUNTER")
+      prev_counter = self.forwarded_counters.get(msg_name)
+      if counter is not None and counter == prev_counter and not ignore_counter:
+        continue
+      self.forwarded_counters[msg_name] = counter
+      new_values = values.copy()
+      new_values.pop("CHECKSUM", None)
+      if ignore_counter:
+        new_values.pop("COUNTER", None)
+      if hook is not None:
+        new_values = hook(new_values, *args, **kwargs)
+        if new_values is None:
+          continue
+      can_sends.append(self.packer_pt.make_can_msg(msg_name, to_bus, new_values))
+      sent = True
+    return sent
 
   def calculate_stock_acc_button(self, CS, target_set_speed, stock_acc_requested, starting):
     if not CS.out.cruiseState.available:
