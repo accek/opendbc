@@ -36,6 +36,21 @@ class HCAMitigation:
     return apply_torque
 
 
+# EPS HCA states in which the MQB/MLB rack accepts a torque request (LH_EPS_03.EPS_HCA_Status 3 and 5).
+EPS_STEERABLE_STATES = ("READY", "ACTIVE")
+
+
+def steer_inhibited(standstill: bool, engine_running: bool, engine_stop_requested: bool, hca_status: str | None) -> bool:
+  """Whether HCA torque output must be held off (MQB stop-start aware).
+
+  Logged stop-start events on MQB: Motor_14.MO_StartStopp_Motorstopp rises ~0.5 s before the EPS drops to
+  INITIALIZING, Motor_14.MO_Motor_laeuft clears only 0.2-0.45 s after the dropout, and an aborted stop drops
+  the EPS for ~1 s without the engine ever stopping. So steering is held off on the predictive stop request,
+  on the engine actually being stopped, and reactively whenever the EPS does not report READY/ACTIVE.
+  """
+  return standstill or not engine_running or engine_stop_requested or hca_status not in EPS_STEERABLE_STATES
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP, CP_SP, CP_AC):
     super().__init__(dbc_names, CP, CP_SP, CP_AC)
@@ -194,12 +209,12 @@ class CarController(CarControllerBase):
       # MQB racks reset the uninterrupted steering timer after a single frame
       # of HCA disabled; this is done whenever output happens to be zero.
 
-      # Don't command the EPS while stationary, or whenever the engine is stopped. This honors "don't steer
-      # at standstill" and avoids poking the EPS when it may have dropped out after the stop-start system
-      # shut the engine off (including while coasting), which can otherwise provoke a steering fault.
-      steer_inhibited = CS.out.standstill or not CS.engine_running
+      # Don't command the EPS while stationary, while the stop-start system is stopping or has stopped the engine
+      # (including while coasting), or whenever the EPS itself does not report READY/ACTIVE. Commanding torque
+      # into an EPS that has dropped out provokes a steering fault that disengages lateral until re-enabled.
+      inhibited = steer_inhibited(CS.out.standstill, CS.engine_running, CS.engine_stop_requested, CS.hca_status)
 
-      if CC.latActive and CS.eps_init_complete and not steer_inhibited:
+      if CC.latActive and CS.eps_init_complete and not inhibited:
         new_torque = int(round(actuators.torque * self.CCP.STEER_MAX))
         apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, self.CCP)
         self.hca_frame_timer_running += self.CCP.STEER_STEP

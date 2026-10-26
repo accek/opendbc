@@ -4,7 +4,7 @@ import unittest
 
 from opendbc.car import DT_CTRL
 from opendbc.car.structs import CarParams
-from opendbc.car.volkswagen.carcontroller import HCAMitigation
+from opendbc.car.volkswagen.carcontroller import HCAMitigation, steer_inhibited
 from opendbc.car.volkswagen.carstate import CarState, wheel_direction_sign
 from opendbc.car.volkswagen.values import CAR, CarControllerParams as CCP, FW_QUERY_CONFIG, WMI
 from opendbc.car.volkswagen.fingerprints import FW_VERSIONS
@@ -63,6 +63,44 @@ class TestVolkswagenSteerFault(unittest.TestCase):
   def test_active_never_faults(self):
     temp, perm = self._carstate().update_hca_state("ACTIVE", drive_mode=True, engine_running=True)
     assert not temp and not perm
+
+
+class TestVolkswagenSteerInhibit(unittest.TestCase):
+  """steer_inhibited must hold HCA torque off around MQB stop-start engine stops (timings from logged rlogs)."""
+
+  def test_nominal_not_inhibited(self):
+    for status in ("READY", "ACTIVE"):
+      with self.subTest(status=status):
+        assert not steer_inhibited(standstill=False, engine_running=True, engine_stop_requested=False, hca_status=status)
+
+  def test_standstill(self):
+    assert steer_inhibited(standstill=True, engine_running=True, engine_stop_requested=False, hca_status="ACTIVE")
+
+  def test_engine_stopped(self):
+    assert steer_inhibited(standstill=False, engine_running=False, engine_stop_requested=False, hca_status="ACTIVE")
+
+  def test_engine_stop_requested_leads_dropout(self):
+    # Motor_14.MO_StartStopp_Motorstopp rises ~0.5 s before the EPS drops out, while MO_Motor_laeuft is still set and
+    # the EPS still reports ACTIVE (and MO_Motor_laeuft never clears on an aborted stop): stop steering right away.
+    assert steer_inhibited(standstill=False, engine_running=True, engine_stop_requested=True, hca_status="ACTIVE")
+
+  def test_eps_not_steerable(self):
+    # Reactive gate: the EPS reports INITIALIZING for ~1 s around every engine stop, before MO_Motor_laeuft clears.
+    for status in ("DISABLED", "INITIALIZING", "FAULT", "REJECTED", "PREEMPTED", None):
+      with self.subTest(status=status):
+        assert steer_inhibited(standstill=False, engine_running=True, engine_stop_requested=False, hca_status=status)
+
+  def test_resume_requires_engine_running(self):
+    # On restart the EPS is READY ~0.3 s after the stop request clears, but MO_Motor_laeuft follows up to ~1.3 s later;
+    # resuming on the (conservative) engine-running flag is intended.
+    assert steer_inhibited(standstill=False, engine_running=False, engine_stop_requested=False, hca_status="READY")
+    assert not steer_inhibited(standstill=False, engine_running=True, engine_stop_requested=False, hca_status="READY")
+
+  def test_carstate_records_hca_status(self):
+    cs = TestVolkswagenSteerFault._carstate()
+    for status in ("INITIALIZING", "READY", "ACTIVE"):
+      cs.update_hca_state(status, drive_mode=True, engine_running=True)
+      assert cs.hca_status == status
 
 
 class TestVolkswagenWheelDirection(unittest.TestCase):

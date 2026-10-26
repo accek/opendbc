@@ -24,6 +24,8 @@ class CarState(CarStateBase):
     self.frame = 0
     self.eps_init_complete = False
     self.engine_running = True  # set from the MQB powertrain bus; defaults True for PQ/MLB
+    self.engine_stop_requested = False  # MQB stop-start: engine ECU has commanded an engine stop
+    self.hca_status = None  # last EPS HCA status string (e.g. "READY", "ACTIVE", "INITIALIZING")
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.button_states_ac = {button.event_type: False for button in self.CCP.BUTTONS_AC}
@@ -145,6 +147,12 @@ class CarState(CarStateBase):
     # so it also covers an engine cut while the car is still rolling. It rides on Motor_14, which is already
     # on the powertrain bus - unlike Motor_12 (engine RPM), which sits on a bus we don't parse here.
     self.engine_running = bool(pt_cp.vl["Motor_14"]["MO_Motor_laeuft"])
+    # MO_Motor_laeuft is a late signal: in logged stop-start events it only cleared 0.2-0.45 s AFTER the EPS had
+    # already dropped to INITIALIZING, and it never clears for an aborted stop (stop requested, driver releases the
+    # brake, engine keeps running) even though the EPS still drops out for ~1 s. MO_StartStopp_Motorstopp (engine
+    # stop commanded by the engine ECU) rises ~0.5 s BEFORE the EPS dropout and only ever does so below ~7 km/h, so
+    # the carcontroller uses it to stop steering ahead of the dropout.
+    self.engine_stop_requested = bool(pt_cp.vl["Motor_14"]["MO_StartStopp_Motorstopp"])
     self.parse_mlb_mqb_steering_state(ret, pt_cp, engine_running=self.engine_running)
 
     ret.gasPressed = pt_cp.vl["Motor_20"]["MO_Fahrpedalrohwert_01"] > 0
@@ -379,6 +387,9 @@ class CarState(CarStateBase):
     return
 
   def update_hca_state(self, hca_status, drive_mode=True, engine_running=True):
+    # Remember the raw EPS status so the carcontroller can refuse to command torque unless the EPS reports
+    # READY/ACTIVE (the EPS drops to INITIALIZING for ~1 s around every stop-start engine stop).
+    self.hca_status = hca_status
     # Treat FAULT as temporary for worst likely EPS recovery time, for cars without factory Lane Assist
     # DISABLED means the EPS hasn't been configured to support Lane Assist
     self.eps_init_complete = self.eps_init_complete or (hca_status in ("DISABLED", "READY", "ACTIVE") or self.frame > 600)
