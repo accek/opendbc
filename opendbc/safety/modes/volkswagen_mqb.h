@@ -23,8 +23,17 @@ typedef struct {
 } MqbCounterCheck;
 
 // acspilot: counters of ACC messages are tracked across forwarded-stock and openpilot-injected
-// transmissions so that switching between the two never produces a duplicate counter (which would
-// fault the stock ACC module). The destination bus is used as the key.
+// transmissions so that switching between the two never produces a duplicate or stale counter (which
+// would fault the stock ACC module). The destination bus is used as the key.
+//
+// Gaps are tolerated. A frame can legitimately go missing: the harness relay opening at the safety
+// mode switch corrupts whatever is on the wire, and the card skips a stock frame when it lags. The
+// stock ECUs tolerate an isolated missing counter. Demanding exactly last+1 instead blocked the whole
+// stream until the 4-bit counter wrapped (16 frames, 320 ms at 50 Hz): the radar then lost TSK_06 and
+// faulted for 2 s, and when ACC_06/ACC_07 stalled too the ESP latched an ACC-message-consistency fault
+// (ESP_08.ESP_Konsistenz_ACC_Botschaft) that kept the radar faulted until the next ignition cycle.
+#define VOLKSWAGEN_MQB_COUNTER_MAX_GAP 8
+
 static MqbCounterCheck volkswagen_mqb_long_counter_checks[] = {
   {.msg = {MSG_ACC_02, 0, 8, .check_relay = false}},
   {.msg = {MSG_ACC_04, 0, 8, .check_relay = false}},
@@ -55,9 +64,19 @@ static bool volkswagen_mqb_long_counter_check_and_update(const CANPacket_t *msg,
   for (MqbCounterCheck* check = &volkswagen_mqb_long_counter_checks[0]; check->msg.addr != -1; check++) {
     if ((check->msg.addr == addr) && (check->msg.bus == (unsigned int)tx_bus)) {
       int counter = (int)volkswagen_mqb_meb_get_counter(msg);
-      if ((counter != ((check->last_counter + 1) % 16)) && (check->last_counter != -1)) {
-        valid = false;
-      } else {
+      if (check->last_counter != -1) {
+        // How far this frame is ahead of the last accepted counter, modulo 16. 0 is a duplicate and
+        // 9..15 is a stale frame behind the slot (e.g. openpilot's late copy of a frame the stock ACC
+        // just forwarded): both are rejected. Any other gap is accepted and resyncs the slot.
+        int delta = (counter - check->last_counter) % 16;
+        if (delta < 0) {
+          delta += 16;
+        }
+        if ((delta < 1) || (delta > VOLKSWAGEN_MQB_COUNTER_MAX_GAP)) {
+          valid = false;
+        }
+      }
+      if (valid) {
         check->last_counter = (int8_t)counter;
       }
     }
@@ -338,8 +357,9 @@ static bool volkswagen_mqb_fwd_hook(const CANPacket_t *msg) {
     }
   }
 
-  // This is mostly to update counters to avoid duplicate messages when switching from stock to OP.
-  // The check should never fail.
+  // Keep the shared counter slots in sync with the forwarded stock frames so that a later openpilot
+  // injection never duplicates one, and block a forwarded frame only when it would itself duplicate
+  // (or fall behind) what was just sent on the destination bus.
   if (volkswagen_longitudinal && !block_msg) {
     if (!volkswagen_mqb_long_counter_check_and_update(msg, (msg->bus == 0U) ? 2U : 0U)) {
       block_msg = true;

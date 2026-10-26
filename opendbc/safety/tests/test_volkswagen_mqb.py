@@ -251,16 +251,22 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
           cnt_07 = (cnt_07 + 1) % 16
 
   def test_acc_counter_check(self):
-    # acspilot: ACC messages must be sent with sequential counters so they never duplicate the
-    # forwarded stock messages when switching between stock and openpilot control
+    # acspilot: ACC messages must never duplicate (or fall behind) the counter last sent on the car bus,
+    # so a stock<->openpilot switch never repeats a counter. Gaps ahead are tolerated (see
+    # test_counter_gap_tolerated_tx): a lost or skipped frame must not stall the stream.
     self.safety.set_timer(ACC_CHECKS_GRACE_PERIOD_US + 1)
     self.safety.set_controls_allowed(True)
     self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=0)))
     self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=1)))
-    # out of sequence counter is rejected
+    # a gap ahead is accepted and resyncs the slot
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=5)))
+    # a duplicate of the last accepted counter is rejected
     self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=5)))
-    # resuming the sequence is accepted again
-    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=2)))
+    # a stale counter behind the slot is rejected (the sequence it belongs to is already past)
+    self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=2)))
+    self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=4)))
+    # continuing the sequence is accepted
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=6)))
 
   def test_acc_counter_reset(self):
     # acspilot: test-only reset of the counter-continuity tracking. test_models rebuilds the
@@ -332,14 +338,20 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
     self.assertEqual(-1, self.safety.safety_fwd_hook(make_msg(2, MSG_ACC_02, 8)))
 
   def test_fwd_stock_acc_counter_continuity(self):
-    # acspilot: forwarded stock ACC messages must keep sequential counters so they never duplicate the
-    # counters openpilot sends across a stock<->OP handoff; a non-sequential counter blocks the forward
+    # acspilot: forwarded stock ACC messages share the counter slots with openpilot's injections across a
+    # stock<->OP handoff: a duplicate or stale counter blocks the forward, a gap ahead is forwarded and
+    # resyncs the slot (the stock radar's counter is authoritative once a frame is lost)
     self._tx(self._torque_cmd_msg(0))  # mark tx attempted so the fwd hook begins gating
     # stock ACC engaged (status 5) -> ACC_06 forwarded; sequential counters are accepted
     self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=0)))
     self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=1)))
-    # out-of-sequence counter -> forwarding is blocked
+    # a gap ahead (frames 2..4 lost) is still forwarded
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=5)))
+    # duplicate and stale counters are blocked
     self.assertEqual(-1, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=5)))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=3)))
+    # the sequence continues from the resynced slot
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=6)))
 
   def test_long_allowed_ts_pinned_after_grace(self):
     # acspilot: once the grace period lapses with controls not allowed, the rx hook pins the
@@ -358,8 +370,10 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
   # fwd hook (forwarded stock frames, source bus 0<->2 mapped to the dest bus) and the tx hook
   # (openpilot-injected frames, keyed on msg->bus). The slots are shared, so a forwarded stock
   # frame and an injected openpilot frame for the same message form one continuous sequence: the
-  # stock ACC module faults if it ever sees a duplicate or non-sequential counter across the
-  # stock<->openpilot switch. The tests below exercise that shared-slot continuity directly.
+  # stock ACC module faults if it ever sees a duplicate counter across the stock<->openpilot switch.
+  # Gaps ahead of the slot are tolerated (up to VOLKSWAGEN_MQB_COUNTER_MAX_GAP = 8): a frame lost on
+  # the wire or skipped by a lagging card must cost the ECU one missing counter, never a stall of the
+  # whole stream until the counter wraps. The tests below exercise that shared-slot logic directly.
   # ===========================================================================================
 
   # TSK_06 carrying an explicit counter, on a selectable bus. Openpilot injects TSK_06 on bus 2
@@ -456,8 +470,8 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
     for cnt in (0, 1, 2):
       self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=cnt)), cnt)
       self.assertTrue(self._tx(self._acc_07_msg(0.0, cnt=cnt)), cnt)
-    # a gap on ACC_06 is rejected, but ACC_07's independent sequence keeps flowing
-    self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=9)))
+    # a duplicate on ACC_06 is rejected, but ACC_07's independent sequence keeps flowing
+    self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=2)))
     self.assertTrue(self._tx(self._acc_07_msg(0.0, cnt=3)))
     # ACC_06 resumes from its own last accepted counter (2 -> 3), unaffected by the rejected frame
     self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=3)))
@@ -474,6 +488,57 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
     self.assertTrue(self._tx(self._tsk_06_msg(cnt=2, bus=2)))
     # an injected duplicate is rejected
     self.assertFalse(self._tx(self._tsk_06_msg(cnt=2, bus=2)))
+
+  def test_counter_gap_tolerated_tx(self):
+    # the on-car failure: the card skipped one stock frame (or the relay switch ate it), so openpilot's
+    # next copy is 2 ahead of the slot. It must be accepted and the stream must keep flowing; the old
+    # last+1 rule rejected every frame until the counter wrapped 16 frames later.
+    self._start_long()
+    for cnt in (0, 1, 2, 3):
+      self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=cnt)), cnt)
+    # frame 4 lost
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=5)))
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=6)))
+    # gaps up to VOLKSWAGEN_MQB_COUNTER_MAX_GAP (8) are accepted...
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=14)))
+    # ...one more than that is treated as stale and rejected, without consuming the slot
+    self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=(14 + 9) % 16)))
+    self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=15)))
+
+  def test_counter_gap_tolerated_fwd(self):
+    # same for forwarded stock frames while the stock ACC drives
+    self._start_long()
+    for cnt in (0, 1):
+      self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=cnt)), cnt)
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=3)))  # frame 2 lost
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=4)))
+
+  def test_counter_stale_injected_copy_rejected(self):
+    # the stock ACC takes over at counter 7: its frame is forwarded immediately, while openpilot's copies
+    # of frames 6 and 7 are still in flight. Both must be rejected: a stale frame behind the slot and a
+    # duplicate would each break the sequence the car bus already saw.
+    self._start_long()
+    for cnt in (3, 4, 5):
+      self.assertTrue(self._tx(self._acc_06_msg(0.0, cnt=cnt)), cnt)
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=7)))
+    self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=6)))  # stale
+    self.assertFalse(self._tx(self._acc_06_msg(0.0, cnt=7)))  # duplicate
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(5, cnt=8)))
+
+  def test_tsk_06_lost_frame_does_not_stall(self):
+    # the exact sequence from the rlogs: openpilot's TSK_06 copy 9 reaches the radar, the engine's frame
+    # 10 is lost, so the next copy is 11. It must go through (the radar faults after ~100 ms without
+    # TSK_06), and when the stock ACC faults and its TSK_06 is forwarded again, that resumes too.
+    self._start_long()
+    self.assertTrue(self._tx(self._tsk_06_msg(cnt=9, bus=2)))
+    self.assertTrue(self._tx(self._tsk_06_msg(cnt=11, bus=2)))
+    self.assertTrue(self._tx(self._tsk_06_msg(cnt=12, bus=2)))
+    # radar reports a reversible fault (status 6) -> stock TSK_06 is forwarded, continuing the slot
+    self.assertEqual(0, self.safety.safety_fwd_hook(self._acc_06_status_msg(6, cnt=0)))
+    self.assertEqual(2, self.safety.safety_fwd_hook(self._tsk_06_msg(cnt=13, bus=0)))
+    # openpilot's late copy of 13 is a duplicate and is rejected
+    self.assertFalse(self._tx(self._tsk_06_msg(cnt=13, bus=2)))
+    self.assertEqual(2, self.safety.safety_fwd_hook(self._tsk_06_msg(cnt=14, bus=0)))
 
   def test_acc_13_not_counter_checked(self):
     # ACC_13 has no COUNTER signal, so it is intentionally absent from the continuity checks: it

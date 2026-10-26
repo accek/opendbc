@@ -131,6 +131,35 @@ def acc_hud_status_value(cruise_available, gas_pressed, acc_faulted, long_active
   return acc_control_value(cruise_available, gas_pressed, acc_faulted, long_active)
 
 
+def acc_jerk_limits(accel, actual_speed, actual_accel, esp_hold, stopping):
+  """Positive/negative jerk limits for ACC_06, modelled on what the stock radar sends (measured on a MQB Leon):
+  posJerk 1.8 at launch and whenever more than ~1.5 m/s2 is requested, 0.6-1.2 in cruise; negJerk 0.5-1.0 for small
+  corrections and 4.0 only for real braking. On top of that both limits open up when the actual accel is far from
+  the request, so a step request is honoured instead of being ramped over seconds (the previous fixed 0.6 m/s3
+  gave a ~1.5 s rise time to half of a 1 m/s2 step while braking responded within 0.4 s)."""
+  if esp_hold:
+    return 4.0, 4.0
+  if stopping:
+    return 2.0, 4.0
+  pos_jerk = interp(accel, [0.0, 1.0, 1.5], [0.6, 1.2, 1.8])
+  pos_jerk = max(pos_jerk, 1.5 * (accel - actual_accel))
+  pos_jerk = interp(actual_speed, [4.0, 6.0], [max(pos_jerk, 1.8), pos_jerk])  # launch regime, as stock
+  neg_jerk = interp(accel, [-1.5, -0.5], [4.0, 1.0])
+  neg_jerk = max(neg_jerk, 1.5 * (actual_accel - accel))
+  return float(clip(pos_jerk, 0.3, 4.0)), float(clip(neg_jerk, 0.5, 4.0))
+
+
+def acc_comfort_bands(accel, actual_speed):
+  """Permitted control deviation below/above the requested accel (ACC_zul_Regelabw_unten/oben), following the stock
+  radar: a wide lower band while accelerating (0.36), ~0.19 around zero, none while decelerating; the upper band is
+  0.125 (0.19 at motorway speed) and shrinks to zero when braking hard. Both are continuous in accel so they don't
+  chatter at 50 Hz like the previous hard clip did around -0.2..0 m/s2."""
+  unten = interp(accel, [-0.5, 0.0, 0.3], [0.0, 0.192, 0.36])
+  oben_cruise = interp(actual_speed, [15.0, 20.0], [0.125, 0.1875])
+  oben = interp(accel, [-1.75, -1.5, -0.5, 0.0], [0.0, 0.0625, 0.0625, oben_cruise])
+  return float(unten), float(oben)
+
+
 def create_acc_accel_control_1(values, acc_type, accel, acc_control, stopping, starting, esp_hold, lead_accel, stopping_distance, actual_speed, actual_accel):
   acc_enabled = acc_control in (3, 4)
 
@@ -139,27 +168,25 @@ def create_acc_accel_control_1(values, acc_type, accel, acc_control, stopping, s
   else:
     startstop = 0
 
-  if not acc_enabled:
-    pos_jerk = 0.0
-  elif esp_hold:
-    pos_jerk = 4.0
-  elif stopping:
-    pos_jerk = 2.0
+  if acc_enabled:
+    pos_jerk, neg_jerk = acc_jerk_limits(accel, actual_speed, actual_accel, esp_hold, stopping)
   else:
-    pos_jerk = interp(actual_speed, [4.0, 6.0], [1.8, 0.6 if lead_accel is not None else 0.3])
-    pos_jerk = max(pos_jerk, -actual_accel + 0.3)  # TODO: it's not ideally replicating the original logic
+    pos_jerk, neg_jerk = 0.0, 0.0
 
-  # For stock comfort bands, see https://colab.research.google.com/drive/1y80X3VBACwLfMLvUE57GV4Yv6N8JjEmG?usp=sharing
+  if acc_enabled and not stopping:
+    band_lower, band_upper = acc_comfort_bands(accel, actual_speed)
+  else:
+    band_lower, band_upper = 0.0, 0.0
+
   values = {
     "COUNTER": values["COUNTER"],
     "ACC_Typ": acc_type,
     "ACC_Status_ACC": acc_control,
     "ACC_StartStopp_Info": max(startstop, values["ACC_StartStopp_Info"]),  # stock radar may know better
     "ACC_Sollbeschleunigung_02": accel if acc_enabled else 3.01,
-    "ACC_zul_Regelabw_unten": clip(accel + 0.2, 0.0, 0.2) if acc_enabled and not stopping else 0,  # TODO: even better adjustment of comfort-band
-    "ACC_zul_Regelabw_oben": (clip((accel + 1.5) * (0.125 / 1.5), 0, 0.125)
-                              if acc_enabled and not stopping else 0),  # TODO: even better adjustment of comfort-band
-    "ACC_neg_Sollbeschl_Grad_02": 4.0 if acc_enabled else 0,  # TODO: dynamic adjustment of jerk limits
+    "ACC_zul_Regelabw_unten": band_lower,
+    "ACC_zul_Regelabw_oben": band_upper,
+    "ACC_neg_Sollbeschl_Grad_02": neg_jerk,
     "ACC_pos_Sollbeschl_Grad_02": pos_jerk,
     "ACC_Anfahren": starting,
     "ACC_Anhalten": stopping,

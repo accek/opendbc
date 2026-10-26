@@ -34,8 +34,10 @@ class CarState(CarStateBase):
     self.eps_stock_values = False
     self.acc_type = 0
 
-    # acspilot: raw stock message values forwarded by the carcontroller (stock-ACC override)
+    # acspilot: raw stock message values forwarded by the carcontroller (stock-ACC override): the latest
+    # frame per message, and every frame received since the previous step (oldest first)
     self.stock_values: dict = {}
+    self.stock_frames: dict[str, list[dict]] = {}
     self.stock_acc_set_speed: float | None = None
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
@@ -219,6 +221,13 @@ class CarState(CarStateBase):
 
   def update_stock_values(self, msg_name, cp):
     self.stock_values[msg_name] = cp.vl[msg_name]
+    # All frames of this message received since the previous step, oldest first. When the card lags, two
+    # stock frames can arrive in one step; forwarding only the latest would skip a counter on the car bus
+    # (one gap is tolerated by the ECUs and by panda safety, but a lagging card at startup used to skip
+    # counters on every forwarded message at once, which is what stalled the ACC streams).
+    vl_all = cp.vl_all[msg_name]
+    n = len(vl_all["COUNTER"]) if "COUNTER" in vl_all else 0
+    self.stock_frames[msg_name] = [{sig: vals[i] for sig, vals in vl_all.items()} for i in range(n)]
 
   def update_pq(self, pt_cp, cam_cp, ext_cp) -> tuple[structs.CarState, structs.CarStateSP]:
     ret = structs.CarState()
