@@ -194,6 +194,19 @@ def create_acc_accel_control_1(values, acc_type, accel, acc_control, stopping, s
   return values
 
 
+def acc_follow_accel(acc_enabled, accel, lead_accel, esp_hold, starting):
+  """ACC_Folgebeschl, matched to the stock radar (36k samples, see tools/acspilot_tuning/REVIEW.md): the follow
+  controller's demand, which equals the arbitrated request whenever the car is moving, stopping or starting behind
+  a lead; the lead's own acceleration only while the ESP holds the car at standstill; inactive (3.02) without a lead
+  or with ACC off. Feeding the (noisy, vision-derived) lead acceleration while moving, as before, is not what stock
+  does and may be blended into the executed acceleration by the engine/ESC side."""
+  if not acc_enabled or lead_accel is None:
+    return 3.02
+  if esp_hold and not starting:
+    return float(clip(lead_accel, -4.6, 2.99))
+  return float(clip(accel, -4.6, 2.99))
+
+
 def create_acc_accel_control_2(values, acc_type, accel, acc_control, stopping, starting, esp_hold, lead_accel, stopping_distance, actual_speed, actual_accel):
   acc_enabled = acc_control in (3, 4)
 
@@ -215,7 +228,7 @@ def create_acc_accel_control_2(values, acc_type, accel, acc_control, stopping, s
     "COUNTER": values["COUNTER"],
     "ACC_Anhalteweg": stopping_distance if stopping else 20.46,  # Distance to stop (stopping coordinator handles terminal roll-out)
     "ACC_Freilauf_Info": 2 if acc_enabled else 0,
-    "ACC_Folgebeschl": clip(lead_accel, -4.6, 2.99) if lead_accel is not None else 3.02,
+    "ACC_Folgebeschl": acc_follow_accel(acc_enabled, accel, lead_accel, esp_hold, starting),
     "ACC_Sollbeschleunigung_02": accel if acc_enabled else 3.01,
     "ACC_Anforderung_HMS": acc_hold_type,
     "ACC_Anfahren": starting,
